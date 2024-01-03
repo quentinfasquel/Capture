@@ -5,19 +5,23 @@
 //  Created by Quentin Fasquel on 17/12/2023.
 //
 
-import UIKit.UIImage
-
 extension Camera {
-    func takePicture(outputSize: CGSize) async -> UIImage? {
+    func takePicture(outputSize: CGSize) async -> PlatformImage? {
         do {
             let capturePhoto = try await takePicture()
-            let image = UIImage(photo: capturePhoto)
+            let image = PlatformImage(photo: capturePhoto)
+#if os(iOS)
             return image?.fixOrientation().scaleToFill(in: outputSize)
+#elseif os(macOS)
+            return image?.scaleToFill(in: outputSize)
+#endif
         } catch {
             return nil
         }
     }
-    
+}
+
+extension Camera {
     func stopRecording() async -> URL? {
         do {
             return try await stopRecording() as URL

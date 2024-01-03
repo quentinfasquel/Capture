@@ -6,7 +6,7 @@
 //
 
 import AVFoundation
-import UIKit.UIDevice
+//import UIKit.UIDevice
 
 protocol CaptureRecording: NSObject {
     func stopRecording()

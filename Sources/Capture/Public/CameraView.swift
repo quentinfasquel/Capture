@@ -16,7 +16,7 @@ public struct CameraViewOptions {
 
 public struct CameraView<CameraOverlay: View>: View {
 
-    @Binding var outputImage: UIImage?
+    @Binding var outputImage: PlatformImage?
     @Binding var outputVideo: URL?
     var options: CameraViewOptions
     var cameraOverlay: ((AVAuthorizationStatus) -> CameraOverlay)
@@ -30,7 +30,7 @@ public struct CameraView<CameraOverlay: View>: View {
 
     public init(
         camera: Camera = .default,
-        outputImage: Binding<UIImage?> = .constant(nil),
+        outputImage: Binding<PlatformImage?> = .constant(nil),
         outputVideo: Binding<URL?> = .constant(nil),
         options: CameraViewOptions = .default,
         @ViewBuilder overlay: @escaping ((AVAuthorizationStatus) -> CameraOverlay)
