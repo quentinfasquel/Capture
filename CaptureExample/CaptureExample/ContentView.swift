@@ -14,7 +14,7 @@ enum Tab: Hashable {
 }
 
 struct ContentView: View {
-    @State private var capturedImage: UIImage?
+    @State private var capturedImage: PlatformImage?
     @State private var recordedVideo: URL?
     @State private var path = NavigationPath()
     @State private var isPaused: Bool = false
@@ -50,12 +50,18 @@ struct ContentView: View {
             .safeAreaInset(edge: .bottom) {
                 photoVideoPicker
             }
-            .navigationBarTitleDisplayMode(.inline)
+//            .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(item: $capturedImage) { image in
+#if os(iOS)
             Image(uiImage: image)
                 .scaledToFit()
                 .ignoresSafeArea()
+#elseif os(macOS)
+            Image(nsImage: image)
+                .scaledToFit()
+                .ignoresSafeArea()
+#endif
         }
         //
         .sheet(item: $recordedVideo) { videoURL in
@@ -130,7 +136,7 @@ extension URL: Identifiable {
     }
 }
 
-extension UIImage: Identifiable {
+extension PlatformImage: Identifiable {
     public var id: ObjectIdentifier {
         ObjectIdentifier(self)
     }

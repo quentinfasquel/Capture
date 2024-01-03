@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 24/12/2023.
 //
 
+#if canImport(UIKit)
 import AVFoundation
 import UIKit
 
@@ -24,3 +25,4 @@ extension UIImage.Orientation {
         }
     }
 }
+#endif

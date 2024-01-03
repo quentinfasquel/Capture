@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 07/12/2023.
 //
 
+#if canImport(UIKit)
 import UIKit.UIScreen
 
 extension UIScreen {
@@ -24,3 +25,4 @@ extension UIScreen {
         }
     }
 }
+#endif

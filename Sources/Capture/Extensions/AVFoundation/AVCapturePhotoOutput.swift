@@ -27,11 +27,13 @@ extension AVCapturePhotoOutput {
         // photoSettings.maxPhotoDimensions = .init(width: , height: )
         photoSettings.photoQualityPrioritization = .balanced
 
+#if os(iOS)
         if let pixelFormatType = photoSettings.availablePreviewPhotoPixelFormatTypes.first {
             photoSettings.previewPhotoFormat = [
                 String(kCVPixelBufferPixelFormatTypeKey): pixelFormatType
             ]
         }
+#endif
 
         return photoSettings
     }

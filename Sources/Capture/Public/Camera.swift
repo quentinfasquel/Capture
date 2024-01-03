@@ -6,7 +6,10 @@
 //
 
 @_exported import AVFoundation
+import Foundation
+#if canImport(UIKit)
 import UIKit.UIDevice
+#endif
 
 public enum CameraError: Error {
     case missingPhotoOutput
@@ -74,13 +77,17 @@ public final class Camera: NSObject, ObservableObject {
 
         devicePosition = position
         devicePositionDidChange(position)
+        #if os(iOS)
         registerDeviceOrientationObserver()
+        #endif
         devices = availableCaptureDevices
     }
     
     deinit {
+        #if os(iOS)
         // Stop observing device orientation
         stopObservingDeviceOrientation()
+        #endif
         print(#function, self)
     }
     
@@ -121,7 +128,8 @@ public final class Camera: NSObject, ObservableObject {
     @MainActor
     public func resume() {
         isPreviewPaused = false
-        startCaptureSession()
+        Task { await start() }
+//        startCaptureSession()
     }
 
     
@@ -205,17 +213,32 @@ public final class Camera: NSObject, ObservableObject {
     // MARK: - Capture Device Management
 
     private lazy var discoverySession: AVCaptureDevice.DiscoverySession = {
-        AVCaptureDevice.DiscoverySession(
-            deviceTypes: [
-                .builtInDualCamera,
-                .builtInDualWideCamera,
-                .builtInUltraWideCamera,
-                .builtInLiDARDepthCamera,
-                .builtInTelephotoCamera,
-                .builtInTripleCamera,
-                .builtInTrueDepthCamera,
-                .builtInWideAngleCamera,
-            ],
+#if os(iOS)
+        var deviceTypes: [AVCaptureDevice.DeviceType] = [
+            .builtInDualCamera,
+            .builtInDualWideCamera,
+            .builtInUltraWideCamera,
+            .builtInLiDARDepthCamera,
+            .builtInTelephotoCamera,
+            .builtInTripleCamera,
+            .builtInTrueDepthCamera,
+            .builtInWideAngleCamera,
+        ]
+        if #available(iOS 17, *) {
+            deviceTypes.append(.continuityCamera)
+        }
+#elseif os(macOS)
+        var deviceTypes: [AVCaptureDevice.DeviceType] = [
+            .builtInWideAngleCamera,
+            .deskViewCamera,
+        ]
+        if #available(macOS 14.0, *) {
+            deviceTypes.append(.continuityCamera)
+            deviceTypes.append(.external)
+        }
+#endif
+        return AVCaptureDevice.DiscoverySession(
+            deviceTypes: deviceTypes,
             mediaType: .video,
             position: .unspecified
         )
@@ -357,6 +380,9 @@ public final class Camera: NSObject, ObservableObject {
     
     private func updateCaptureVideoInput(_ cameraDevice: AVCaptureDevice) {
         guard isCaptureSessionConfigured else {
+            if configureCaptureSession(), !isPreviewPaused {
+                startCaptureSession()
+            }
             return
         }
 
@@ -377,7 +403,9 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         updateCaptureOutputMirroring()
+        #if os(iOS)
         updateCaptureOutputOrientation()
+        #endif
     }
 
     private func updateCaptureVideoOutput(_ recordingSettings: RecordingSettings?) {
@@ -423,7 +451,9 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         updateCaptureOutputMirroring()
+        #if os(iOS)
         updateCaptureOutputOrientation()
+        #endif
     }
 
     private func updateCaptureOutputMirroring() {
@@ -435,6 +465,7 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
 
+#if os(iOS)
     private func updateCaptureOutputOrientation() {
         var deviceOrientation = UIDevice.current.orientation
         logger.debug("Updating capture outputs video orientation: \(String(describing: deviceOrientation))")
@@ -449,9 +480,12 @@ public final class Camera: NSObject, ObservableObject {
             }
         }
     }
+#endif
 
     private func startCaptureSession() {
+#if os(iOS)
         startObservingDeviceOrientation()
+#endif
         if !captureSession.isRunning {
             sessionQueue.async {
                 self.captureSession.startRunning()
@@ -460,7 +494,9 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     private func stopCaptureSession() {
+#if os(iOS)
         stopObservingDeviceOrientation()
+#endif
         if captureSession.isRunning {
             sessionQueue.async {
                 self.captureSession.stopRunning()
@@ -475,7 +511,7 @@ public final class Camera: NSObject, ObservableObject {
     }
 
     // MARK: - Device Orientation Handling
-
+#if os(iOS)
     private var deviceOrientationObserver: NSObjectProtocol?
 
     private func registerDeviceOrientationObserver() {
@@ -495,6 +531,7 @@ public final class Camera: NSObject, ObservableObject {
     private func stopObservingDeviceOrientation() {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
+#endif
 
     // MARK: - Private Methods
 

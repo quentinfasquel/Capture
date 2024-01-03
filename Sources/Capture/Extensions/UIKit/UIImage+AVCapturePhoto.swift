@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 07/12/2023.
 //
 
+#if canImport(UIKit)
 import UIKit.UIImage
 
 extension UIImage {
@@ -36,3 +37,4 @@ extension UIImage.Orientation {
         }
     }
 }
+#endif

@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 15/11/2023.
 //
 
+#if canImport(UIKit)
 import func AVFoundation.AVMakeRect
 import UIKit.UIImage
 
@@ -20,6 +21,7 @@ extension UIImage {
         let cropRect = AVMakeRect(aspectRatio: targetSize, insideRect: imageBounds)
         let rendererFormat = UIGraphicsImageRendererFormat(); rendererFormat.scale = 1
         let renderer = UIGraphicsImageRenderer(size: targetSize, format: rendererFormat)
+        
         return renderer.image { context in
             // UIImage and CGContext coordinates are flipped.
             var transform = CGAffineTransform(translationX: 0.0, y: targetSize.height)
@@ -32,3 +34,5 @@ extension UIImage {
         }
     }
 }
+
+#endif
