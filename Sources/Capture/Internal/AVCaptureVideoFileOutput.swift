@@ -6,7 +6,6 @@
 //
 
 import AVFoundation
-import UIKit.UIDevice
 
 protocol CaptureRecording: NSObject {
     func stopRecording()
@@ -78,7 +77,8 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
             return
         }
 
-        assetWriter = try? AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        let outputFileType = fileType(for: videoSettings.codec) ?? .mov
+        assetWriter = try? AVAssetWriter(outputURL: outputURL, fileType: outputFileType)
         delegate = recordingDelegate
 
         guard let assetWriter else {
