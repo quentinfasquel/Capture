@@ -68,10 +68,10 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     public convenience init(_ position: CameraPosition) {
-        self.init(position, preset: .high)
+        self.init(position: position, preset: .high)
     }
 
-    public required init(_ position: CameraPosition, preset: AVCaptureSession.Preset) {
+    public required init(position: CameraPosition, preset: AVCaptureSession.Preset) {
         sessionPreset = preset
         super.init()
 
@@ -129,7 +129,6 @@ public final class Camera: NSObject, ObservableObject {
     public func resume() {
         isPreviewPaused = false
         Task { await start() }
-//        startCaptureSession()
     }
 
     
@@ -403,9 +402,7 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         updateCaptureOutputMirroring()
-        #if os(iOS)
         updateCaptureOutputOrientation()
-        #endif
     }
 
     private func updateCaptureVideoOutput(_ recordingSettings: RecordingSettings?) {
@@ -451,9 +448,7 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         updateCaptureOutputMirroring()
-        #if os(iOS)
         updateCaptureOutputOrientation()
-        #endif
     }
 
     private func updateCaptureOutputMirroring() {
@@ -465,8 +460,9 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
 
-#if os(iOS)
+
     private func updateCaptureOutputOrientation() {
+#if os(iOS)
         var deviceOrientation = UIDevice.current.orientation
         logger.debug("Updating capture outputs video orientation: \(String(describing: deviceOrientation))")
         if case .unknown = deviceOrientation {
@@ -479,8 +475,10 @@ public final class Camera: NSObject, ObservableObject {
                 videoConnection.videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
             }
         }
-    }
+#elseif os(macOS)
 #endif
+    }
+
 
     private func startCaptureSession() {
 #if os(iOS)
