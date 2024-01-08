@@ -19,6 +19,7 @@ public final class Camera: NSObject, ObservableObject {
 
     let captureSession = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "\(bundleIdentifier).Camera.Session")
+    private let sessionPreset: AVCaptureSession.Preset
 
     private var isCaptureSessionConfigured = false
     public private(set) var captureDevice: AVCaptureDevice? {
@@ -63,11 +64,16 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
     
-    required init(_ devicePosition: CameraPosition) {
+    public convenience init(_ position: CameraPosition) {
+        self.init(position, preset: .high)
+    }
+
+    public required init(_ position: CameraPosition, preset: AVCaptureSession.Preset) {
+        sessionPreset = preset
         super.init()
 
-        self.devicePosition = devicePosition
-        devicePositionDidChange(devicePosition)
+        devicePosition = position
+        devicePositionDidChange(position)
         registerDeviceOrientationObserver()
         devices = availableCaptureDevices
     }
@@ -307,7 +313,12 @@ public final class Camera: NSObject, ObservableObject {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
 
-        captureSession.sessionPreset = .medium
+        if captureSession.canSetSessionPreset(sessionPreset) {
+            captureSession.sessionPreset = sessionPreset
+        } else {
+            captureSession.sessionPreset = .high
+            log(.cannotSetSessionPreset)
+        }
 
         // Adding video input (used for both photo and video capture)
         let videoInput = AVCaptureDeviceInput(device: captureDevice, logger: logger)
