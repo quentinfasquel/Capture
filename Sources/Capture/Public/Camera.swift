@@ -130,9 +130,10 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     public func switchCaptureDevice() {
-        if let captureDevice, let index = availableCaptureDevices.firstIndex(of: captureDevice) {
-            let nextIndex = (index + 1) % availableCaptureDevices.count
-            self.captureDevice = availableCaptureDevices[nextIndex]
+        let captureDevices = availableCaptureDevices
+        if let captureDevice, let index = captureDevices.firstIndex(of: captureDevice) {
+            let nextIndex = (index + 1) % captureDevices.count
+            self.captureDevice = captureDevices[nextIndex]
         } else {
             self.captureDevice = AVCaptureDevice.default(for: .video)
         }
@@ -248,7 +249,7 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     private var availableCaptureDevices: [AVCaptureDevice] {
-        captureDevices.filter { $0.isConnected && !$0.isSuspended }
+        captureDevices.filter { $0.isConnected && !$0.isSuspended }.unique()
     }
 
     private var isUsingFrontCaptureDevice: Bool {
