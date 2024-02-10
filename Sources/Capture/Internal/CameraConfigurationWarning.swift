@@ -15,6 +15,7 @@ enum CameraConfigurationWarning {
     case cannotAddVideoDataOutput
     case cannotAddVideoFileOutput
     case cannotAddVideoInput
+    case cannotSetSessionPreset
 }
 
 extension Camera {
@@ -35,6 +36,8 @@ extension Camera {
             logger.warning("Cannot add video file output")
         case .cannotAddVideoInput:
             logger.warning("Cannot add video input")
+        case .cannotSetSessionPreset:
+            logger.warning("Cannot set request session preset")
         }
     }
 }
