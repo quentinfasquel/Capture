@@ -51,6 +51,9 @@ public final class Camera: NSObject, ObservableObject {
     var recordingSettings: RecordingSettings?
 
     // MARK: - Public API
+
+    public private(set) var previewLayer: AVCaptureVideoPreviewLayer
+
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
@@ -86,6 +89,7 @@ public final class Camera: NSObject, ObservableObject {
     ) {
         devicePosition = position
         sessionPreset = preset
+        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         super.init()
         #if os(iOS)
         Task { @MainActor in

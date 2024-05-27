@@ -48,7 +48,6 @@ public struct CameraView<CameraOverlay: View>: View {
         ZStack {
             if case .authorized = authorizationStatus {
                 CaptureVideoPreview(
-                    captureSession: camera.captureSession,
                     isPaused: camera.isPreviewPaused
                 )
                 .blur(radius: camera.isPreviewPaused ? 20 : 0, opaque: true)
@@ -64,11 +63,11 @@ public struct CameraView<CameraOverlay: View>: View {
             cameraOverlay(authorizationStatus)
         }
         .environmentObject(camera)
-        .environment(\.takePicture, TakePictureAction() {
+        .environment(\.takePicture, TakePictureAction {
             if options.isTakePictureFeedbackEnabled {
                 showsTakePictureFeedback = true
             }
-            
+
             outputImage = await camera.takePicture(outputSize: outputSize)
         })
         .environment(\.recordVideo, RecordVideoAction(start: camera.startRecording) {

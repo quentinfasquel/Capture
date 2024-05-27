@@ -15,26 +15,19 @@ typealias ViewRepresentable = NSViewRepresentable
 #endif
 
 struct CaptureVideoPreview: ViewRepresentable {
-    var captureSession: AVCaptureSession
+    @EnvironmentObject private var camera: Camera
     var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     var isPaused: Bool = false
     
 #if os(iOS)
     func makeUIView(context: Context) -> AVCaptureVideoPreviewView {
         let coordinator = context.coordinator
-        let previewView = AVCaptureVideoPreviewView(captureSession: captureSession)
+        let previewView = AVCaptureVideoPreviewView(camera.previewLayer)
         coordinator.view = previewView
-        coordinator.videoPreviewLayer = previewView.videoPreviewLayer
         return previewView
     }
 
     func updateUIView(_ view: AVCaptureVideoPreviewView, context: Context) {
-        if isPaused {
-            context.coordinator.pause(session: captureSession)
-        } else {
-            context.coordinator.resume(session: captureSession)
-        }
-
         view.videoPreviewLayer.videoGravity = videoGravity
     }
 
@@ -43,7 +36,7 @@ struct CaptureVideoPreview: ViewRepresentable {
     }
 #elseif os(macOS)
     func makeNSView(context: Context) -> AVCaptureVideoPreviewView {
-        AVCaptureVideoPreviewView(captureSession: captureSession)
+        AVCaptureVideoPreviewView(camera.previewLayer)
     }
 
     func updateNSView(_ nsView: AVCaptureVideoPreviewView, context: Context) {
@@ -56,35 +49,40 @@ struct CaptureVideoPreview: ViewRepresentable {
 
 #if os(macOS)
 final class AVCaptureVideoPreviewView: NSView {
-    let captureSession: AVCaptureSession
+    let videoPreviewLayer: AVCaptureVideoPreviewLayer
 
-    required init(captureSession: AVCaptureSession) {
-        self.captureSession = captureSession
+    convenience init(session: AVCaptureSession) {
+        self.init(AVCaptureVideoPreviewLayer(session: session))
+    }
+
+    required init(_ previewLayer: AVCaptureVideoPreviewLayer) {
+        videoPreviewLayer = previewLayer
         super.init(frame: .zero)
         self.wantsLayer = true
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
     override func makeBackingLayer() -> CALayer {
-        AVCaptureVideoPreviewLayer(session: captureSession)
-    }
-    
-    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-        layer as! AVCaptureVideoPreviewLayer
+        videoPreviewLayer
     }
 }
 #elseif os(iOS)
 
 final class AVCaptureVideoPreviewView: UIView {
-    let captureSession: AVCaptureSession
     let pausedView: UIImageView = UIImageView()
+    let videoPreviewLayer: AVCaptureVideoPreviewLayer
 
-    required init(captureSession: AVCaptureSession) {
-        self.captureSession = captureSession
+    convenience init(session: AVCaptureSession) {
+        self.init(AVCaptureVideoPreviewLayer(session: session))
+    }
+
+    required init(_ previewLayer: AVCaptureVideoPreviewLayer) {
+        videoPreviewLayer = previewLayer
         super.init(frame: .zero)
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
         // Adding a paused image view
         pausedView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         pausedView.isHidden = true
@@ -95,25 +93,19 @@ final class AVCaptureVideoPreviewView: UIView {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
-    override class var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
-    }
-
-    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-        layer as! AVCaptureVideoPreviewLayer
-    }
 
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         if superview != nil {
-            videoPreviewLayer.session = captureSession
+            layer.addSublayer(videoPreviewLayer)
+            videoPreviewLayer.frame = bounds
         }
     }
     
     override func layoutSubviews() {
         super.layoutSubviews()
-        
+        videoPreviewLayer.frame = bounds
+
         if let connection = videoPreviewLayer.connection, connection.isVideoOrientationSupported {
             let deviceOrientation = UIDevice.current.orientation
             switch deviceOrientation {
@@ -141,13 +133,15 @@ extension CaptureVideoPreview {
     class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         let previewOutput = AVCaptureVideoDataOutput()
         let dispatchQueue = DispatchQueue(label: "\(bundleIdentifier).CaptureVideoPreview")
-        var videoPreviewLayer: AVCaptureVideoPreviewLayer?
         var view: AVCaptureVideoPreviewView?
         var pausedImage: UIImage?
-        
+
+        private var videoPreviewLayer: AVCaptureVideoPreviewLayer? {
+            view?.videoPreviewLayer
+        }
+
         func pause(session: AVCaptureSession) {
             previewOutput.setSampleBufferDelegate(self, queue: dispatchQueue)
-            session.addOutput(previewOutput)
         }
 
         func resume(session: AVCaptureSession) {
