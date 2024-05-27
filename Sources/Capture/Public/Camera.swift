@@ -78,19 +78,23 @@ public final class Camera: NSObject, ObservableObject {
         devicePosition = position
         devicePositionDidChange(position)
         #if os(iOS)
-        registerDeviceOrientationObserver()
+        Task { @MainActor in
+            registerDeviceOrientationObserver()
+        }
         #endif
         devices = availableCaptureDevices
     }
     
     deinit {
         #if os(iOS)
-        // Stop observing device orientation
-        stopObservingDeviceOrientation()
+        Task { @MainActor in
+            // Stop observing device orientation
+            Self.stopObservingDeviceOrientation()
+        }
         #endif
         print(#function, self)
     }
-    
+
     public func start() async {
         guard await checkAuthorization() else {
             logger.error("Camera access was not authorized.")
@@ -482,7 +486,9 @@ public final class Camera: NSObject, ObservableObject {
 
     private func startCaptureSession() {
 #if os(iOS)
-        startObservingDeviceOrientation()
+        Task { @MainActor in
+            Self.startObservingDeviceOrientation()
+        }
 #endif
         if !captureSession.isRunning {
             sessionQueue.async {
@@ -493,7 +499,9 @@ public final class Camera: NSObject, ObservableObject {
     
     private func stopCaptureSession() {
 #if os(iOS)
-        stopObservingDeviceOrientation()
+        Task { @MainActor in
+            Self.stopObservingDeviceOrientation()
+        }
 #endif
         if captureSession.isRunning {
             sessionQueue.async {
@@ -512,7 +520,7 @@ public final class Camera: NSObject, ObservableObject {
 #if os(iOS)
     private var deviceOrientationObserver: NSObjectProtocol?
 
-    private func registerDeviceOrientationObserver() {
+    @MainActor private func registerDeviceOrientationObserver() {
         deviceOrientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: UIDevice.current,
@@ -522,11 +530,11 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
 
-    private func startObservingDeviceOrientation() {
+    @MainActor private static func startObservingDeviceOrientation() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
     }
 
-    private func stopObservingDeviceOrientation() {
+    @MainActor private static func stopObservingDeviceOrientation() {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 #endif
