@@ -79,14 +79,10 @@ public struct CameraView<CameraOverlay: View>: View {
         }
         .onAppear {
             camera.updateRecordingSettings(recordingSettings)
-            camera.resume()
-        }
-        .onDisappear {
-            camera.stop()
-        }
-        .task {
             if options.automaticallyRequestAuthorization {
-                await requestAuthorizationThenStart()
+                Task {
+                    await requestAuthorizationThenStart()
+                }
             }
         }
     }

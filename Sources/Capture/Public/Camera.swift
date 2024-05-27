@@ -25,11 +25,14 @@ public final class Camera: NSObject, ObservableObject {
     private let sessionPreset: AVCaptureSession.Preset
 
     private var isCaptureSessionConfigured = false
+
     public private(set) var captureDevice: AVCaptureDevice? {
         didSet {
             if captureDevice != oldValue, let captureDevice {
-                deviceId = captureDevice.uniqueID
-                captureDeviceDidChange(captureDevice)
+                Task { @MainActor in
+                    deviceId = captureDevice.uniqueID
+                    captureDeviceDidChange(captureDevice)
+                }
             }
         }
     }
@@ -44,18 +47,10 @@ public final class Camera: NSObject, ObservableObject {
 
     // MARK: - Internal Properties
     
-    var devicePosition: CameraPosition = .unspecified {
-        didSet {
-            if devicePosition != oldValue {
-                devicePositionDidChange(devicePosition)
-            }
-        }
-    }
-
+    var devicePosition: CameraPosition
     var recordingSettings: RecordingSettings?
 
     // MARK: - Public API
-    
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
@@ -66,17 +61,32 @@ public final class Camera: NSObject, ObservableObject {
             }
         }
     }
-    
-    public convenience init(_ position: CameraPosition) {
-        self.init(position: position, preset: .high)
+
+    ///
+    /// Instantiate a Camera instance with a high capture session preset
+    /// - parameter position: the initial AVCaptureDevice.Position to use
+    ///
+    public convenience init(
+        _ position: CameraPosition
+    ) {
+        self.init(
+            position: position,
+            preset: .high
+        )
     }
 
-    public required init(position: CameraPosition, preset: AVCaptureSession.Preset) {
+    ///
+    /// Instantiate a Camera instance
+    /// - parameter position: the initial AVCaptureDevice.Position to use
+    /// - parameter preset: the capture session's preset to use
+    ///
+    public required init(
+        position: CameraPosition,
+        preset: AVCaptureSession.Preset
+    ) {
+        devicePosition = position
         sessionPreset = preset
         super.init()
-
-        devicePosition = position
-        devicePositionDidChange(position)
         #if os(iOS)
         Task { @MainActor in
             registerDeviceOrientationObserver()
@@ -98,6 +108,11 @@ public final class Camera: NSObject, ObservableObject {
     public func start() async {
         guard await checkAuthorization() else {
             logger.error("Camera access was not authorized.")
+            return
+        }
+
+        guard !captureSession.isRunning else {
+            logger.info("Camera is already running")
             return
         }
 
@@ -152,14 +167,20 @@ public final class Camera: NSObject, ObservableObject {
     
     // MARK: Capture Action
 
-    internal func updateRecordingSettings(_ recordingSettings: RecordingSettings?) {
-        self.recordingSettings = recordingSettings
+    internal func updateRecordingSettings(_ newRecordingSettings: RecordingSettings?) {
+        guard recordingSettings != newRecordingSettings else {
+            return
+        }
+
+        recordingSettings = newRecordingSettings
+
         guard isCaptureSessionConfigured else {
             // else it will be applied during session configuration
             return
         }
+
         sessionQueue.async { [self] in
-            updateCaptureVideoOutput(recordingSettings)
+            updateCaptureVideoOutput(newRecordingSettings)
         }
     }
 
@@ -195,7 +216,7 @@ public final class Camera: NSObject, ObservableObject {
             }
         }
     }
-    
+
     public func takePicture() async throws -> AVCapturePhoto {
         guard let photoOutput = capturePhotoOutput else {
             throw CameraError.missingPhotoOutput
@@ -203,7 +224,6 @@ public final class Camera: NSObject, ObservableObject {
 
         defer { didTakePicture = nil }
 
-        
         return try await withCheckedThrowingContinuation { continuation in
             didTakePicture = { continuation.resume(with: $0) }
             sessionQueue.async {
@@ -260,14 +280,16 @@ public final class Camera: NSObject, ObservableObject {
 #if os(macOS) || (os(iOS) && targetEnvironment(macCatalyst))
         devices += discoverySession.devices
 #else
-        if let defaultDevice = AVCaptureDevice.default(for: .video) {
+
+        let defaultDevice = AVCaptureDevice.default(for: .video)
+        if let defaultDevice {
             devices.append(defaultDevice)
         }
 
-        if let backDevice = backCaptureDevices.first {
+        if let backDevice = backCaptureDevices.first, backDevice != defaultDevice {
             devices += [backDevice]
         }
-        if let frontDevice = frontCaptureDevices.first {
+        if let frontDevice = frontCaptureDevices.first, frontDevice != defaultDevice {
             devices += [frontDevice]
         }
 #endif
@@ -289,12 +311,10 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     private func updateCaptureDevice(forDevicePosition devicePosition: AVCaptureDevice.Position) {
-        if case .front = devicePosition, let frontCaptureDevice = frontCaptureDevices.first {
-            captureDevice = frontCaptureDevice
-        } else if case .back = devicePosition, let backCaptureDevice = backCaptureDevices.first {
-            captureDevice = backCaptureDevice
-        } else if case .unspecified = devicePosition {
+        if case .unspecified = devicePosition {
             captureDevice = AVCaptureDevice.default(for: .video)
+        } else if let device = captureDevices.first(where: { $0.position == devicePosition }) {
+            captureDevice = device
         } else {
             logger.warning("Couldn't update capture device for \(String(describing: devicePosition))")
         }
@@ -302,29 +322,35 @@ public final class Camera: NSObject, ObservableObject {
 
     // MARK: - Authorization Handling
 
+    public var authorizationStatus: AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .video)
+    }
+
     @discardableResult
     func checkAuthorization() async -> Bool {
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
-        case .authorized:
-            // logger.debug("Camera access authorized.")
-            return true
-        case .notDetermined:
-            logger.debug("Camera access not determined.")
-            sessionQueue.suspend()
-            let status = await AVCaptureDevice.requestAccess(for: .video)
-            sessionQueue.resume()
-            return status
-        case .denied:
-            logger.debug("Camera access denied.")
-            return false
-        case .restricted:
-            logger.debug("Camera library access restricted.")
-            return false
-        @unknown default:
-            return false
+        switch authorizationStatus {
+            case .authorized:
+                return true
+            case .notDetermined:
+                logger.debug("Camera access not determined.")
+                sessionQueue.suspend()
+                let status = await AVCaptureDevice.requestAccess(for: .video)
+                sessionQueue.resume()
+                if status {
+                    logger.debug("Camera access authorized.")
+                }
+                return status
+            case .denied:
+                logger.debug("Camera access denied.")
+                return false
+            case .restricted:
+                logger.debug("Camera library access restricted.")
+                return false
+            @unknown default:
+                return false
         }
     }
-    
+
     // MARK: - Capture Session Configuration
 
     private var videoConnections: [AVCaptureConnection] {
@@ -332,6 +358,12 @@ public final class Camera: NSObject, ObservableObject {
     }
 
     private func configureCaptureSession() -> Bool {
+        guard case .authorized = authorizationStatus else {
+            return false
+        }
+
+        updateCaptureDevice(forDevicePosition: devicePosition)
+
         guard let captureDevice else {
             log(.cameraDeviceNotSet)
             return false
@@ -382,6 +414,10 @@ public final class Camera: NSObject, ObservableObject {
     }
     
     private func updateCaptureVideoInput(_ cameraDevice: AVCaptureDevice) {
+        guard case .authorized = authorizationStatus else {
+            return
+        }
+
         guard isCaptureSessionConfigured else {
             if configureCaptureSession(), !isPreviewPaused {
                 startCaptureSession()
@@ -548,12 +584,6 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
     
-    private func devicePositionDidChange(_ newDevicePosition: AVCaptureDevice.Position) {
-        logger.debug("Using device position: \(String(describing: newDevicePosition))")
-        sessionQueue.async { [self] in
-            updateCaptureDevice(forDevicePosition: newDevicePosition)
-        }
-    }
 }
 
 // MARK: - File Output Recording Delegate
