@@ -49,6 +49,7 @@ public final class Camera: NSObject, ObservableObject {
     
     var devicePosition: CameraPosition
     var recordingSettings: RecordingSettings?
+    var isAudioEnabled: Bool
 
     // MARK: - Public API
 
@@ -68,13 +69,17 @@ public final class Camera: NSObject, ObservableObject {
     ///
     /// Instantiate a Camera instance with a high capture session preset
     /// - parameter position: the initial AVCaptureDevice.Position to use
+    /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
+    /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
     ///
     public convenience init(
-        _ position: CameraPosition
+        _ position: CameraPosition,
+        audioEnabled: Bool = true
     ) {
         self.init(
             position: position,
-            preset: .high
+            preset: .high,
+            audioEnabled: audioEnabled
         )
     }
 
@@ -82,13 +87,17 @@ public final class Camera: NSObject, ObservableObject {
     /// Instantiate a Camera instance
     /// - parameter position: the initial AVCaptureDevice.Position to use
     /// - parameter preset: the capture session's preset to use
+    /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
+    /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
     ///
     public required init(
         position: CameraPosition,
-        preset: AVCaptureSession.Preset
+        preset: AVCaptureSession.Preset,
+        audioEnabled: Bool = true
     ) {
         devicePosition = position
         sessionPreset = preset
+        isAudioEnabled = audioEnabled
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         super.init()
         #if os(iOS)
@@ -403,14 +412,16 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         // Configure video capture
-        let audioDevice = AVCaptureDevice.default(for: .audio)
-        let audioInput = AVCaptureDeviceInput(device: audioDevice, logger: logger)
-        if let audioInput, captureSession.canAddInput(audioInput) {
-            captureSession.addInput(audioInput)
-        } else {
-            log(.cannotAddAudioInput)
+        if isAudioEnabled {
+            let audioDevice = AVCaptureDevice.default(for: .audio)
+            let audioInput = AVCaptureDeviceInput(device: audioDevice, logger: logger)
+            if let audioInput, captureSession.canAddInput(audioInput) {
+                captureSession.addInput(audioInput)
+            } else {
+                log(.cannotAddAudioInput)
+            }
         }
-        
+
         updateCaptureVideoOutput(recordingSettings)
 
         isCaptureSessionConfigured = true
