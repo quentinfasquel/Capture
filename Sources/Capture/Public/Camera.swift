@@ -163,18 +163,18 @@ public final class Camera: NSObject, ObservableObject {
         Task { await start() }
     }
 
-    
     public func setCaptureDevice(_ device: AVCaptureDevice) {
         captureDevice = device
     }
     
     public func switchCaptureDevice() {
-        let captureDevices = availableCaptureDevices
-        if let captureDevice, let index = captureDevices.firstIndex(of: captureDevice) {
-            let nextIndex = (index + 1) % captureDevices.count
-            self.captureDevice = captureDevices[nextIndex]
-        } else {
-            self.captureDevice = AVCaptureDevice.default(for: .video)
+        switch captureDevice?.position {
+        case .back:
+            updateCaptureDevice(forDevicePosition: .front)
+        case .front:
+            updateCaptureDevice(forDevicePosition: .back)
+        default:
+            break
         }
     }
     
