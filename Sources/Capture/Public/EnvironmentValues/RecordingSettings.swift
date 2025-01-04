@@ -24,15 +24,8 @@ struct RecordingSettings: Equatable {
     }
 }
 
-enum RecordingSettingsEnvironmentKey: EnvironmentKey {
-    static var defaultValue: RecordingSettings?
-}
-
 extension EnvironmentValues {
-    internal var recordingSettings: RecordingSettings? {
-        get { self[RecordingSettingsEnvironmentKey.self] }
-        set { self[RecordingSettingsEnvironmentKey.self] = newValue }
-    }
+    @Entry internal var recordingSettings: RecordingSettings?
 
     public var recordingAudioSettings: AudioSettings {
         get { recordingSettings?.audio ?? .default }

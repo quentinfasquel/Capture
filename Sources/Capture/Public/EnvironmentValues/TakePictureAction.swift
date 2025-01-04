@@ -18,15 +18,6 @@ public struct TakePictureAction {
     }
 }
 
-private enum TakePictureEnvironmentKey: EnvironmentKey {
-    static var defaultValue: TakePictureAction = .init()
-}
-
 extension EnvironmentValues {
-    
-    public internal(set) var takePicture: TakePictureAction {
-        get { self[TakePictureEnvironmentKey.self] }
-        set { self[TakePictureEnvironmentKey.self] = newValue }
-    }
-
+    @Entry public internal(set) var takePicture: TakePictureAction = .init()
 }

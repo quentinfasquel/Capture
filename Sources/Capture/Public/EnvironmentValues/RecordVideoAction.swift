@@ -26,13 +26,6 @@ public struct RecordVideoAction {
     }
 }
 
-private enum RecordVideoEnvironmentKey: EnvironmentKey {
-    static var defaultValue: RecordVideoAction = .init()
-}
-
 extension EnvironmentValues {
-    public internal(set) var recordVideo: RecordVideoAction {
-        get { self[RecordVideoEnvironmentKey.self] }
-        set { self[RecordVideoEnvironmentKey.self] = newValue }
-    }
+    @Entry public internal(set) var recordVideo: RecordVideoAction = .init()
 }
