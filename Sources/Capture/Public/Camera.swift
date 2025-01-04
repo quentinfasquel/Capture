@@ -16,11 +16,11 @@ public enum CameraError: Error {
     case missingVideoOutput
 }
 
+@MainActor
 public final class Camera: NSObject, ObservableObject {
 
     public static let `default` = Camera(.back)
 
-    let captureSession = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "\(bundleIdentifier).Camera.Session")
     private let sessionPreset: AVCaptureSession.Preset
 
@@ -28,11 +28,13 @@ public final class Camera: NSObject, ObservableObject {
 
     private var captureVideoInput: AVCaptureDeviceInput?
 
+    private let deviceLookup = CaptureDeviceLookup()
     private let movieCapture = MovieCapture()
     private let photoCapture = PhotoCapture()
 
     // MARK: - Internal Properties
-    
+
+    let captureSession = AVCaptureSession()
     var devicePosition: CameraPosition
     var recordingSettings: RecordingSettings?
     var isAudioEnabled: Bool
@@ -91,7 +93,7 @@ public final class Camera: NSObject, ObservableObject {
             registerDeviceOrientationObserver()
         }
         #endif
-        devices = availableCaptureDevices
+        devices = deviceLookup.availableCaptureDevices
     }
     
     deinit {
@@ -207,85 +209,10 @@ public final class Camera: NSObject, ObservableObject {
 
     // MARK: - Capture Device Management
 
-    private lazy var discoverySession: AVCaptureDevice.DiscoverySession = {
-#if os(iOS)
-        var deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInDualCamera,
-            .builtInDualWideCamera,
-            .builtInUltraWideCamera,
-            .builtInLiDARDepthCamera,
-            .builtInTelephotoCamera,
-            .builtInTripleCamera,
-            .builtInTrueDepthCamera,
-            .builtInWideAngleCamera,
-        ]
-        if #available(iOS 17, *) {
-            deviceTypes.append(.continuityCamera)
-        }
-#elseif os(macOS)
-        var deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInWideAngleCamera,
-            .deskViewCamera,
-        ]
-        if #available(macOS 14.0, *) {
-            deviceTypes.append(.continuityCamera)
-            deviceTypes.append(.external)
-        }
-#endif
-        return AVCaptureDevice.DiscoverySession(
-            deviceTypes: deviceTypes,
-            mediaType: .video,
-            position: .unspecified
-        )
-    }()
-
-    private var backCaptureDevices: [AVCaptureDevice] {
-        discoverySession.devices.filter { $0.position == .back }
-    }
-
-    private var frontCaptureDevices: [AVCaptureDevice] {
-        discoverySession.devices.filter { $0.position == .front }
-    }
-    
-    private var captureDevices: [AVCaptureDevice] {
-        var devices = [AVCaptureDevice]()
-#if os(macOS) || (os(iOS) && targetEnvironment(macCatalyst))
-        devices += discoverySession.devices
-#else
-
-        let defaultDevice = AVCaptureDevice.default(for: .video)
-        if let defaultDevice {
-            devices.append(defaultDevice)
-        }
-
-        if let backDevice = backCaptureDevices.first, backDevice != defaultDevice {
-            devices += [backDevice]
-        }
-        if let frontDevice = frontCaptureDevices.first, frontDevice != defaultDevice {
-            devices += [frontDevice]
-        }
-#endif
-        return devices
-    }
-    
-    private var availableCaptureDevices: [AVCaptureDevice] {
-        captureDevices.filter { $0.isConnected && !$0.isSuspended }.unique()
-    }
-
-    private var isUsingFrontCaptureDevice: Bool {
-        guard let captureDevice else { return false }
-        return frontCaptureDevices.contains(captureDevice)
-    }
-    
-    private var isUsingBackCaptureDevice: Bool {
-        guard let captureDevice else { return false }
-        return backCaptureDevices.contains(captureDevice)
-    }
-    
     private func updateCaptureDevice(forDevicePosition devicePosition: AVCaptureDevice.Position) {
         if case .unspecified = devicePosition {
             captureDevice = AVCaptureDevice.default(for: .video)
-        } else if let device = captureDevices.first(where: { $0.position == devicePosition }) {
+        } else if let device = deviceLookup.captureDevices.first(where: { $0.position == devicePosition }) {
             captureDevice = device
         } else {
             logger.warning("Couldn't update capture device for \(String(describing: devicePosition))")
@@ -440,14 +367,17 @@ public final class Camera: NSObject, ObservableObject {
     }
 
     private func updateCaptureOutputMirroring() {
-        let isVideoMirrored = isUsingFrontCaptureDevice
+        guard let captureDevice else {
+            return
+        }
+
+        let isVideoMirrored = captureDevice.position == .front
         videoConnections.forEach { videoConnection in
             if videoConnection.isVideoMirroringSupported {
                 videoConnection.isVideoMirrored = isVideoMirrored
             }
         }
     }
-
 
     private func updateCaptureOutputOrientation() {
 #if os(iOS)
@@ -466,7 +396,6 @@ public final class Camera: NSObject, ObservableObject {
 #elseif os(macOS)
 #endif
     }
-
 
     private func startCaptureSession() {
 #if os(iOS)
