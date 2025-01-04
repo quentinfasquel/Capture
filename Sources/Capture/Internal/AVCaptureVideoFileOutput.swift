@@ -49,7 +49,7 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
     
     // MARK: - Recording
         
-    public private(set) var audioSettings = AudioSettings(
+    private(set) var audioSettings = AudioSettings(
         formatID: kAudioFormatMPEG4AAC,
         sampleRate: 44100,
         numberOfChannels: 2,
@@ -58,14 +58,14 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
         encoderBitRate: .bitRate(128000)
     )
     
-    public private(set) var videoSettings = VideoSettings(
+    private(set) var videoSettings = VideoSettings(
         codec: .h264,
         width: 0,
         height: 0,
         scalingMode: .resizeAspectFill
     )
     
-    public func configureOutput(audioSettings: AudioSettings? = nil, videoSettings: VideoSettings) {
+    func configureOutput(audioSettings: AudioSettings? = nil, videoSettings: VideoSettings) {
         if let audioSettings {
             self.audioSettings = audioSettings
         }
