@@ -7,6 +7,10 @@
 
 @preconcurrency import AVFoundation
 
+extension AVFileType {
+    var utType: UTType { UTType(rawValue)! }
+}
+
 func fileType(for videoCodec: AVVideoCodecType) -> AVFileType? {
     switch videoCodec {
     case .proRes422:

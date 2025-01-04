@@ -26,12 +26,11 @@ public final class Camera: NSObject, ObservableObject {
 
     private var isCaptureSessionConfigured = false
 
-    private var captureMovieFileOutput: AVCaptureMovieFileOutput?
     private var capturePhotoOutput: AVCapturePhotoOutput?
     private var captureVideoInput: AVCaptureDeviceInput?
-    private var captureVideoFileOutput: AVCaptureVideoFileOutput?
 
-    private var didStopRecording: ((Result<URL, Error>) -> Void)?
+    private let movieCapture = MovieCapture()
+
     private var didTakePicture: ((Result<AVCapturePhoto, Error>) -> Void)?
 
     // MARK: - Internal Properties
@@ -191,32 +190,16 @@ public final class Camera: NSObject, ObservableObject {
             return
         }
 
+        isRecording = true
         sessionQueue.async { [self] in
-            let temporaryDirectory = FileManager.default.temporaryDirectory
-
-            if let videoOutput = captureVideoFileOutput {
-                let outputURL = temporaryDirectory.appending(component: "\(Date.now).mp4")
-                videoOutput.startRecording(to: outputURL, recordingDelegate: self)
-            } else if let videoOutput = captureMovieFileOutput {
-                let outputURL = temporaryDirectory.appending(component: "\(Date.now).mov")
-                videoOutput.startRecording(to: outputURL, recordingDelegate: self)
-            }
+            movieCapture.startRecording()
         }
     }
 
     public func stopRecording() async throws -> URL {
-        guard let videoOutput: CaptureRecording = captureVideoFileOutput ?? captureMovieFileOutput else {
-            throw CameraError.missingVideoOutput
-        }
-
-        defer { didStopRecording = nil }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            didStopRecording = { continuation.resume(with: $0) }
-            sessionQueue.async {
-                videoOutput.stopRecording()
-            }
-        }
+        defer { isRecording = false }
+        // sessionQueue.async
+        return try await movieCapture.stopRecording()
     }
 
     public func takePicture() async throws -> AVCapturePhoto {
@@ -453,39 +436,14 @@ public final class Camera: NSObject, ObservableObject {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
 
-        if let recordingSettings, let captureVideoFileOutput {
-            captureVideoFileOutput.configureOutput(
-                audioSettings: recordingSettings.audio,
-                videoSettings: recordingSettings.video
-            )
-        } else if let recordingSettings {
-            if let movieFileOutput = captureMovieFileOutput {
-                captureSession.removeOutput(movieFileOutput)
-                captureMovieFileOutput = nil
+        let previousMovieOutput = movieCapture.movieOutput
+        if let movieOutput = movieCapture.configureOutput(settings: recordingSettings) {
+            if let previousMovieOutput {
+                captureSession.removeOutput(previousMovieOutput)
             }
 
-            let videoFileOutput = AVCaptureVideoFileOutput()
-            videoFileOutput.configureOutput(
-                audioSettings: recordingSettings.audio,
-                videoSettings: recordingSettings.video
-            )
-            if captureSession.canAddOutput(videoFileOutput) {
-                captureSession.addOutput(videoFileOutput)
-                captureVideoFileOutput = videoFileOutput
-            } else {
-                log(.cannotAddVideoFileOutput)
-            }
-
-        } else if captureMovieFileOutput == nil {
-            if let videoFileOutput = captureVideoFileOutput {
-                captureSession.removeOutput(videoFileOutput)
-                captureVideoFileOutput = nil
-            }
-
-            let moveFileOutput = AVCaptureMovieFileOutput()
-            if captureSession.canAddOutput(moveFileOutput) {
-                captureSession.addOutput(moveFileOutput)
-                captureMovieFileOutput = moveFileOutput
+            if captureSession.canAddOutput(movieOutput) {
+                captureSession.addOutput(movieOutput)
             } else {
                 log(.cannotAddVideoFileOutput)
             }
@@ -588,60 +546,6 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
     
-}
-
-// MARK: - File Output Recording Delegate
-
-extension Camera: AVCaptureFileOutputRecordingDelegate {
-
-    public func fileOutput(
-        _ output: AVCaptureFileOutput,
-        didStartRecordingTo fileURL: URL,
-        from connections: [AVCaptureConnection]
-    ) {
-        isRecording = true
-    }
-    
-    public func fileOutput(
-        _ output: AVCaptureFileOutput,
-        didFinishRecordingTo outputFileURL: URL,
-        from connections: [AVCaptureConnection],
-        error: Error?
-    ) {
-        isRecording = false
-        if let error {
-            didStopRecording?(.failure(error))
-        } else {
-            didStopRecording?(.success(outputFileURL))
-        }
-    }
-}
-
-// MARK: - Video File Output Recording Delegate
-
-extension Camera: AVCaptureVideoFileOutputRecordingDelegate {
-
-    func videoFileOutput(
-        _ output: AVCaptureVideoFileOutput,
-        didStartRecordingTo fileURL: URL,
-        from connections: [AVCaptureConnection]
-    ) {
-        isRecording = true
-    }
-    
-    func videoFileOutput(
-        _ output: AVCaptureVideoFileOutput,
-        didFinishRecordingTo outputFileURL: URL,
-        from connections: [AVCaptureConnection],
-        error: Error?
-    ) {
-        isRecording = false
-        if let error {
-            didStopRecording?(.failure(error))
-        } else {
-            didStopRecording?(.success(outputFileURL))
-        }
-    }
 }
 
 // MARK: - Photo Capture Delegate

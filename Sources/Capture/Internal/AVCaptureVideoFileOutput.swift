@@ -20,8 +20,8 @@ extension AVCaptureMovieFileOutput: CaptureRecording {
 final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
 
     private let outputQueue = DispatchQueue(label: "\(bundleIdentifier).CaptureVideoFileOutput")
-    fileprivate let audioDataOutput = AVCaptureAudioDataOutput()
-    fileprivate let videoDataOutput = AVCaptureVideoDataOutput()
+    let audioDataOutput = AVCaptureAudioDataOutput()
+    let videoDataOutput = AVCaptureVideoDataOutput()
     
     private var assetWriter: AVAssetWriter?
     private var audioWriterInput: AVAssetWriterInput?
@@ -37,7 +37,9 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
         isRecording && !isStoppingRecording
     }
 
-    override init() {
+    init(audioSettings: AudioSettings = .default, videoSettings: VideoSettings = .default) {
+        self.audioSettings = audioSettings
+        self.videoSettings = videoSettings
         super.init()
         audioDataOutput.setSampleBufferDelegate(self, queue: outputQueue)
         videoDataOutput.setSampleBufferDelegate(self, queue: outputQueue)
@@ -49,22 +51,9 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
     
     // MARK: - Recording
         
-    private(set) var audioSettings = AudioSettings(
-        formatID: kAudioFormatMPEG4AAC,
-        sampleRate: 44100,
-        numberOfChannels: 2,
-        audioFileType: kAudioFileMPEG4Type,
-//        encoderAudioQuality: .high,
-        encoderBitRate: .bitRate(128000)
-    )
-    
-    private(set) var videoSettings = VideoSettings(
-        codec: .h264,
-        width: 0,
-        height: 0,
-        scalingMode: .resizeAspectFill
-    )
-    
+    private(set) var audioSettings: AudioSettings
+    private(set) var videoSettings: VideoSettings
+
     func configureOutput(audioSettings: AudioSettings? = nil, videoSettings: VideoSettings) {
         if let audioSettings {
             self.audioSettings = audioSettings
@@ -77,7 +66,7 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
             return
         }
 
-        let outputFileType = fileType(for: videoSettings.codec) ?? .mov
+        let outputFileType = Capture.fileType(for: videoSettings.codec) ?? .mov
         assetWriter = try? AVAssetWriter(outputURL: outputURL, fileType: outputFileType)
         delegate = recordingDelegate
 
