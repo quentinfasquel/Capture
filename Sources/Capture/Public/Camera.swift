@@ -26,12 +26,10 @@ public final class Camera: NSObject, ObservableObject {
 
     private var isCaptureSessionConfigured = false
 
-    private var capturePhotoOutput: AVCapturePhotoOutput?
     private var captureVideoInput: AVCaptureDeviceInput?
 
     private let movieCapture = MovieCapture()
-
-    private var didTakePicture: ((Result<AVCapturePhoto, Error>) -> Void)?
+    private let photoCapture = PhotoCapture()
 
     // MARK: - Internal Properties
     
@@ -203,19 +201,8 @@ public final class Camera: NSObject, ObservableObject {
     }
 
     public func takePicture() async throws -> AVCapturePhoto {
-        guard let photoOutput = capturePhotoOutput else {
-            throw CameraError.missingPhotoOutput
-        }
-
-        defer { didTakePicture = nil }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            didTakePicture = { continuation.resume(with: $0) }
-            sessionQueue.async {
-                let photoSettings = photoOutput.photoSettings()
-                photoOutput.capturePhoto(with: photoSettings, delegate: self)
-            }
-        }
+        // sessionQueue.async
+        try await photoCapture.capturePhoto()
     }
 
     // MARK: - Capture Device Management
@@ -374,11 +361,10 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         // Configure photo capture
-        let photoOutput = AVCapturePhotoOutput()
+        let photoOutput = photoCapture.capturePhotoOutput
         photoOutput.maxPhotoQualityPrioritization = .quality
         if captureSession.canAddOutput(photoOutput) {
             captureSession.addOutput(photoOutput)
-            capturePhotoOutput = photoOutput
         } else {
             log(.cannotAddPhotoOutput)
         }
@@ -543,24 +529,6 @@ public final class Camera: NSObject, ObservableObject {
         logger.debug("Using capture device: \(newCaptureDevice.localizedName)")
         sessionQueue.async { [self] in
             updateCaptureVideoInput(newCaptureDevice)
-        }
-    }
-    
-}
-
-// MARK: - Photo Capture Delegate
-
-extension Camera: AVCapturePhotoCaptureDelegate {
-
-    public func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        if let error {
-            didTakePicture?(.failure(error))
-        } else {
-            didTakePicture?(.success(photo))
         }
     }
 }

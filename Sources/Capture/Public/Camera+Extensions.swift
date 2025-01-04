@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 17/12/2023.
 //
 
+@preconcurrency import AVFoundation
 import Foundation
 
 extension Camera {
