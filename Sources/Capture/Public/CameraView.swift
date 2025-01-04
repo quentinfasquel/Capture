@@ -8,8 +8,8 @@
 import SwiftUI
 import AVKit
 
-public struct CameraViewOptions {
-    public private(set) static var `default` = CameraViewOptions()
+public struct CameraViewOptions: Sendable {
+    public static let `default` = CameraViewOptions()
     var automaticallyRequestAuthorization: Bool = true
     var isTakePictureFeedbackEnabled: Bool = true
 }

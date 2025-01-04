@@ -7,9 +7,9 @@
 
 import SwiftUI
 
-public struct TakePictureAction {
+public struct TakePictureAction: Sendable {
 
-    var handler: () async -> Void = {
+    var handler: @Sendable () async -> Void = {
         assertionFailure("@Environment(\\.takePicture) must be accessed from a camera overlay view")
     }
 

@@ -7,13 +7,13 @@
 
 import SwiftUI
 
-public struct RecordVideoAction {
+public struct RecordVideoAction: Sendable {
 
-    var start: () -> Void = {
+    var start: @Sendable () -> Void = {
         assertionFailure("@Environment(\\.recordVideo) must be accessed from a camera overlay view")
     }
 
-    var stop: () async -> Void = {
+    var stop: @Sendable () async -> Void = {
         assertionFailure("@Environment(\\.recordVideo) must be accessed from a camera overlay view")
     }
     

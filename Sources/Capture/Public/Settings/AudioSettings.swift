@@ -18,8 +18,8 @@ extension AudioSettings {
     )
 }
 
-public struct AudioSettings: Equatable {
-    
+public struct AudioSettings: Equatable, Sendable {
+
     /// value is an integer (format ID) from CoreAudioTypes.h
     public var formatID: AudioFormatID
 
@@ -118,13 +118,13 @@ public struct AudioSettings: Equatable {
     
     // MARK: - Property Values
 
-    public enum EncoderBitRate: Equatable {
+    public enum EncoderBitRate: Equatable, Sendable {
         case bitRate(Int)
         case bitRatePerChannel(Int)
     }
     
     /// values for AVEncoderBitRateStrategyKey
-    public enum AudioBitRateStrategy: String {
+    public enum AudioBitRateStrategy: String, Sendable {
         case constant
         case longTermAverage
         case variableConstrained
@@ -132,7 +132,7 @@ public struct AudioSettings: Equatable {
     }
 
     /// values for AVSampleRateConverterAlgorithmKey
-    public enum SampleRateConverterAlgorithm: String {
+    public enum SampleRateConverterAlgorithm: String, Sendable {
         case normal
         case mastering
         case minimumPhase
