@@ -6,7 +6,7 @@
 //
 
 #if os(macOS)
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 
 extension NSImage {

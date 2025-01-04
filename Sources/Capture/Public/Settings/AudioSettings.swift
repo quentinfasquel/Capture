@@ -6,7 +6,7 @@
 //  Created by Quentin Fasquel on 24/12/2023.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 
 extension AudioSettings {
     public static let `default` = AudioSettings(

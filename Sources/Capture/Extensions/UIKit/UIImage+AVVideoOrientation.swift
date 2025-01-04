@@ -6,7 +6,7 @@
 //
 
 #if canImport(UIKit)
-import AVFoundation
+@preconcurrency import AVFoundation
 import UIKit
 
 extension UIImage.Orientation {

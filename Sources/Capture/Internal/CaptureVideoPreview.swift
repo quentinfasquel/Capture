@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 16/12/2023.
 //
 
+@preconcurrency import AVFoundation
 import SwiftUI
 #if os(iOS)
 import UIKit

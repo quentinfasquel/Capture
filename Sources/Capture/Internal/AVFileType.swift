@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 02/01/2024.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 
 func fileType(for videoCodec: AVVideoCodecType) -> AVFileType? {
     switch videoCodec {

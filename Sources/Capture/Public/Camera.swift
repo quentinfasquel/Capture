@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 17/12/2023.
 //
 
-@_exported import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 #if canImport(UIKit)
 import UIKit.UIDevice

@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 16/12/2023.
 //
 
-import Foundation
+@preconcurrency import AVFoundation
 
 public typealias CameraPosition = AVCaptureDevice.Position
 

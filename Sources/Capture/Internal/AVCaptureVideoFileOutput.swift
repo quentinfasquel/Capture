@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 17/12/2023.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 
 protocol CaptureRecording: NSObject {
     func stopRecording()

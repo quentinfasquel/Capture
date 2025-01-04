@@ -130,13 +130,13 @@ struct ContentView: View {
             .preferredColorScheme(.dark)
 }
 
-extension URL: Identifiable {
+extension URL: @retroactive Identifiable {
     public var id: String {
         absoluteString
     }
 }
 
-extension PlatformImage: Identifiable {
+extension PlatformImage: @retroactive Identifiable {
     public var id: ObjectIdentifier {
         ObjectIdentifier(self)
     }

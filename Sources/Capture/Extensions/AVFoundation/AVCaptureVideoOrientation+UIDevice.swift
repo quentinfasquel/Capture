@@ -6,7 +6,7 @@
 //
 
 #if canImport(UIKit)
-import AVFoundation
+@preconcurrency import AVFoundation
 import UIKit.UIDevice
 
 extension AVCaptureVideoOrientation {
