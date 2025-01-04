@@ -26,17 +26,6 @@ public final class Camera: NSObject, ObservableObject {
 
     private var isCaptureSessionConfigured = false
 
-    public private(set) var captureDevice: AVCaptureDevice? {
-        didSet {
-            if captureDevice != oldValue, let captureDevice {
-                Task { @MainActor in
-                    deviceId = captureDevice.uniqueID
-                    captureDeviceDidChange(captureDevice)
-                }
-            }
-        }
-    }
-
     private var captureMovieFileOutput: AVCaptureMovieFileOutput?
     private var capturePhotoOutput: AVCapturePhotoOutput?
     private var captureVideoInput: AVCaptureDeviceInput?
@@ -58,10 +47,10 @@ public final class Camera: NSObject, ObservableObject {
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
-    @Published public var deviceId: String = "" {
+    @Published public var captureDevice: AVCaptureDevice? {
         didSet {
-            if deviceId != captureDevice?.uniqueID {
-                captureDevice = devices.first(where: { $0.uniqueID == deviceId })
+            if oldValue != captureDevice, let captureDevice {
+                captureDeviceDidChange(captureDevice)
             }
         }
     }

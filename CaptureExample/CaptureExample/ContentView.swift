@@ -87,10 +87,10 @@ struct ContentView: View {
     }
 
     @ViewBuilder var cameraDevicePicker: some View {
-        Picker(selection: $camera.deviceId) {
+        Picker(selection: $camera.captureDevice) {
             ForEach(camera.devices, id: \.uniqueID) { device in
                 Text(device.localizedName)
-                    .tag(device.uniqueID)
+                    .tag(device)
             }
         } label: { EmptyView() }
     }
