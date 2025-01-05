@@ -26,8 +26,6 @@ public final class Camera: NSObject, ObservableObject {
 
     private var isCaptureSessionConfigured = false
 
-    private var captureVideoInput: AVCaptureDeviceInput?
-
     private let deviceLookup = CaptureDeviceLookup()
     private let movieCapture = MovieCapture()
     private let photoCapture = PhotoCapture()
