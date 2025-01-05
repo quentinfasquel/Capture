@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum CameraConfigurationWarning {
+enum CaptureConfigurationWarning {
     case audioDeviceNotFound
     case cameraDeviceNotSet
     case cannotAddAudioInput
@@ -18,9 +18,9 @@ enum CameraConfigurationWarning {
     case cannotSetSessionPreset
 }
 
-extension Camera {
+extension CaptureService {
 
-    func log(_ warning: CameraConfigurationWarning) {
+    nonisolated func log(_ warning: CaptureConfigurationWarning) {
         switch warning {
         case .audioDeviceNotFound:
             logger.warning("Audio device not found")
