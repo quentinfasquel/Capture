@@ -38,12 +38,6 @@ struct ContentView: View {
             // Environment values override:
             // - recordingAudioSettings
             // - recordingVideoSettings
-            .environment(\.recordingVideoSettings, VideoSettings(
-                codec: .h264,
-                width: 200,
-                height: 200,
-                scalingMode: .resizeAspectFill
-            ))
             .overlay(alignment: .topTrailing) {
                 cameraDevicePicker
             }
@@ -55,10 +49,12 @@ struct ContentView: View {
         .sheet(item: $capturedImage) { image in
 #if os(iOS)
             Image(uiImage: image)
+                .resizable()
                 .scaledToFit()
                 .ignoresSafeArea()
 #elseif os(macOS)
             Image(nsImage: image)
+                .resizable()
                 .scaledToFit()
                 .ignoresSafeArea()
 #endif
