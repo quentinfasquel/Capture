@@ -9,7 +9,7 @@ import SwiftUI
 
 public struct RecordVideoAction: Sendable {
 
-    var start: @Sendable () -> Void = {
+    var start: @Sendable () async -> Void = {
         assertionFailure("@Environment(\\.recordVideo) must be accessed from a camera overlay view")
     }
 
@@ -18,7 +18,7 @@ public struct RecordVideoAction: Sendable {
     }
     
     public func startRecording() {
-        start()
+        Task { await start() }
     }
 
     public func stopRecording() {

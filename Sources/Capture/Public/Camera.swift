@@ -16,7 +16,6 @@ public enum CameraError: Error {
     case missingVideoOutput
 }
 
-@MainActor
 public final class Camera: ObservableObject {
 
     public static let `default` = Camera(.back)
@@ -110,12 +109,12 @@ public final class Camera: ObservableObject {
         }
 
         await captureService.startCaptureSession()
-        Self.startObservingDeviceOrientation()
+        await Self.startObservingDeviceOrientation()
     }
 
     public func stop() {
         Task {
-            Self.stopObservingDeviceOrientation()
+            await Self.stopObservingDeviceOrientation()
             await captureService.stopCaptureSession()
         }
     }
@@ -131,6 +130,7 @@ public final class Camera: ObservableObject {
         Task { await start() }
     }
 
+    @MainActor
     public func setCaptureDevice(_ device: AVCaptureDevice) {
         captureDevice = device
     }
@@ -158,6 +158,7 @@ public final class Camera: ObservableObject {
 
     }
 
+    @MainActor
     public func startRecording() {
         guard !isRecording else {
             return
@@ -167,11 +168,13 @@ public final class Camera: ObservableObject {
         Task { await captureService.startRecording() }
     }
 
+    @MainActor
     public func stopRecording() async throws -> URL {
         defer { isRecording = false }
         return try await captureService.stopRecording()
     }
 
+    @MainActor
     public func takePicture() async throws -> AVCapturePhoto {
         return try await captureService.capturePhoto()
     }
@@ -219,7 +222,7 @@ public final class Camera: ObservableObject {
         }
     }
 
-    // MARK: - Capture Session Configuration
+    // MARK: - Capture Service Configuration
 
     private func configureCaptureService() async -> Bool {
         guard case .authorized = authorizationStatus else {

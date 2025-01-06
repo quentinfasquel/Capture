@@ -114,7 +114,7 @@ actor CaptureService {
              log(.cannotAddVideoInput)
         }
 
-        if let microphoneDevice {
+        if captureAudioInput == nil, let microphoneDevice {
             let audioInput = try AVCaptureDeviceInput(device: microphoneDevice)
             if captureSession.canAddInput(audioInput) {
                 captureSession.addInput(audioInput)

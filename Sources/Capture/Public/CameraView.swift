@@ -63,14 +63,16 @@ public struct CameraView<CameraOverlay: View>: View {
             cameraOverlay(authorizationStatus)
         }
         .environmentObject(camera)
-        .environment(\.takePicture, TakePictureAction {
+        .environment(\.takePicture, TakePictureAction { @MainActor in
             if options.isTakePictureFeedbackEnabled {
                 showsTakePictureFeedback = true
             }
 
             outputImage = await camera.takePicture(outputSize: outputSize)
         })
-        .environment(\.recordVideo, RecordVideoAction(start: camera.startRecording) {
+        .environment(\.recordVideo, RecordVideoAction {
+            await camera.startRecording()
+        } stop: { @MainActor in
             outputVideo = await camera.stopRecording()
         })
         .onChange(of: recordingSettings) { recordingSettings in
