@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 16/12/2023.
 //
 
+@preconcurrency import AVFoundation
 import SwiftUI
 #if os(iOS)
 import UIKit
@@ -130,7 +131,8 @@ final class AVCaptureVideoPreviewView: UIView {
 
 extension CaptureVideoPreview {
 
-    class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+    @MainActor
+    class Coordinator: NSObject, @preconcurrency AVCaptureVideoDataOutputSampleBufferDelegate {
         let previewOutput = AVCaptureVideoDataOutput()
         let dispatchQueue = DispatchQueue(label: "\(bundleIdentifier).CaptureVideoPreview")
         var view: AVCaptureVideoPreviewView?

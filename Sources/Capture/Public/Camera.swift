@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 17/12/2023.
 //
 
-@_exported import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 #if canImport(UIKit)
 import UIKit.UIDevice
@@ -16,52 +16,34 @@ public enum CameraError: Error {
     case missingVideoOutput
 }
 
-public final class Camera: NSObject, ObservableObject {
+public final class Camera: ObservableObject, @unchecked Sendable {
 
     public static let `default` = Camera(.back)
 
-    let captureSession = AVCaptureSession()
+    private let captureService: CaptureService
+    private let deviceLookup = CaptureDeviceLookup()
     private let sessionQueue = DispatchQueue(label: "\(bundleIdentifier).Camera.Session")
-    private let sessionPreset: AVCaptureSession.Preset
-
-    private var isCaptureSessionConfigured = false
-
-    public private(set) var captureDevice: AVCaptureDevice? {
-        didSet {
-            if captureDevice != oldValue, let captureDevice {
-                Task { @MainActor in
-                    deviceId = captureDevice.uniqueID
-                    captureDeviceDidChange(captureDevice)
-                }
-            }
-        }
-    }
-
-    private var captureMovieFileOutput: AVCaptureMovieFileOutput?
-    private var capturePhotoOutput: AVCapturePhotoOutput?
-    private var captureVideoInput: AVCaptureDeviceInput?
-    private var captureVideoFileOutput: AVCaptureVideoFileOutput?
-
-    private var didStopRecording: ((Result<URL, Error>) -> Void)?
-    private var didTakePicture: ((Result<AVCapturePhoto, Error>) -> Void)?
 
     // MARK: - Internal Properties
-    
-    var devicePosition: CameraPosition
+
+    var sessionPreset: AVCaptureSession.Preset
     var recordingSettings: RecordingSettings?
     var isAudioEnabled: Bool
+    let isUserPreferredCamera: Bool
 
     // MARK: - Public API
 
-    public private(set) var previewLayer: AVCaptureVideoPreviewLayer
+    public let previewLayer = AVCaptureVideoPreviewLayer()
 
+    @Published public private(set) var devicePosition: CameraPosition
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
-    @Published public var deviceId: String = "" {
+    @Published public var captureDevice: AVCaptureDevice? {
         didSet {
-            if deviceId != captureDevice?.uniqueID {
-                captureDevice = devices.first(where: { $0.uniqueID == deviceId })
+            devicePosition = captureDevice?.position ?? .unspecified
+            if oldValue != captureDevice, let captureDevice {
+                captureDeviceDidChange(captureDevice)
             }
         }
     }
@@ -79,7 +61,8 @@ public final class Camera: NSObject, ObservableObject {
         self.init(
             position: position,
             preset: .high,
-            audioEnabled: audioEnabled
+            audioEnabled: audioEnabled,
+            userPreferredCamera: false
         )
     }
 
@@ -90,24 +73,62 @@ public final class Camera: NSObject, ObservableObject {
     /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
     /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
     ///
-    public required init(
-        position: CameraPosition,
+    public convenience init(
+        position: CameraPosition = .unspecified,
         preset: AVCaptureSession.Preset,
         audioEnabled: Bool = true
     ) {
+        self.init(
+            position: position,
+            preset: preset,
+            audioEnabled: audioEnabled,
+            userPreferredCamera: false
+        )
+    }
+
+    @available(iOS 17.0, *)
+    public static var userPreferredCamera: Camera {
+        return .userPreferredCamera(preset: .high, audioEnabled: true)
+    }
+
+    ///
+    /// Instantiate a Camera instance that will match the user preferred camera and update it when switching capture device
+    /// - parameter preset: the capture session's preset to use
+    /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
+    /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
+    ///
+    @available(iOS 17.0, *)
+    public class func userPreferredCamera(
+        preset: AVCaptureSession.Preset,
+        audioEnabled: Bool = true
+    ) -> Camera {
+        return Camera(
+            position: .unspecified,
+            preset: preset,
+            audioEnabled: audioEnabled,
+            userPreferredCamera: true
+        )
+    }
+
+    private init(
+        position: CameraPosition,
+        preset: AVCaptureSession.Preset = .high,
+        audioEnabled: Bool = true,
+        userPreferredCamera: Bool = false
+    ) {
+        captureService = CaptureService(session: AVCaptureSession(), queue: sessionQueue)
         devicePosition = position
         sessionPreset = preset
         isAudioEnabled = audioEnabled
-        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        super.init()
+        isUserPreferredCamera = userPreferredCamera
         #if os(iOS)
         Task { @MainActor in
             registerDeviceOrientationObserver()
         }
         #endif
-        devices = availableCaptureDevices
+        devices = deviceLookup.availableCaptureDevices
     }
-    
+
     deinit {
         #if os(iOS)
         Task { @MainActor in
@@ -124,32 +145,20 @@ public final class Camera: NSObject, ObservableObject {
             return
         }
 
-        guard !captureSession.isRunning else {
-            logger.info("Camera is already running")
+        guard await configureCaptureService() else {
+            // logger.info("Camera is already running") ?
             return
         }
 
-        if isCaptureSessionConfigured {
-            return startCaptureSession()
-        }
-
-        sessionQueue.async { [self] in
-            guard configureCaptureSession() else {
-                return
-            }
-
-            if !captureSession.isRunning {
-                captureSession.startRunning()
-            }
-        }
+        await captureService.startCaptureSession()
+        await Self.startObservingDeviceOrientation()
     }
 
     public func stop() {
-        guard isCaptureSessionConfigured else {
-            return
+        Task {
+            await Self.stopObservingDeviceOrientation()
+            await captureService.stopCaptureSession()
         }
-
-        stopCaptureSession()
     }
 
     @MainActor
@@ -163,6 +172,7 @@ public final class Camera: NSObject, ObservableObject {
         Task { await start() }
     }
 
+    @MainActor
     public func setCaptureDevice(_ device: AVCaptureDevice) {
         captureDevice = device
     }
@@ -186,147 +196,37 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         recordingSettings = newRecordingSettings
+        Task { await captureService.configureCaptureMovieOutput(settings: newRecordingSettings) }
 
-        guard isCaptureSessionConfigured else {
-            // else it will be applied during session configuration
-            return
-        }
-
-        sessionQueue.async { [self] in
-            updateCaptureVideoOutput(newRecordingSettings)
-        }
     }
 
+    @MainActor
     public func startRecording() {
         guard !isRecording else {
             return
         }
 
-        sessionQueue.async { [self] in
-            let temporaryDirectory = FileManager.default.temporaryDirectory
-
-            if let videoOutput = captureVideoFileOutput {
-                let outputURL = temporaryDirectory.appending(component: "\(Date.now).mp4")
-                videoOutput.startRecording(to: outputURL, recordingDelegate: self)
-            } else if let videoOutput = captureMovieFileOutput {
-                let outputURL = temporaryDirectory.appending(component: "\(Date.now).mov")
-                videoOutput.startRecording(to: outputURL, recordingDelegate: self)
-            }
-        }
+        isRecording = true
+        Task { await captureService.startRecording() }
     }
 
+    @MainActor
     public func stopRecording() async throws -> URL {
-        guard let videoOutput: CaptureRecording = captureVideoFileOutput ?? captureMovieFileOutput else {
-            throw CameraError.missingVideoOutput
-        }
-
-        defer { didStopRecording = nil }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            didStopRecording = { continuation.resume(with: $0) }
-            sessionQueue.async {
-                videoOutput.stopRecording()
-            }
-        }
+        defer { isRecording = false }
+        return try await captureService.stopRecording()
     }
 
+    @MainActor
     public func takePicture() async throws -> AVCapturePhoto {
-        guard let photoOutput = capturePhotoOutput else {
-            throw CameraError.missingPhotoOutput
-        }
-
-        defer { didTakePicture = nil }
-
-        return try await withCheckedThrowingContinuation { continuation in
-            didTakePicture = { continuation.resume(with: $0) }
-            sessionQueue.async {
-                let photoSettings = photoOutput.photoSettings()
-                photoOutput.capturePhoto(with: photoSettings, delegate: self)
-            }
-        }
+        return try await captureService.capturePhoto()
     }
 
     // MARK: - Capture Device Management
 
-    private lazy var discoverySession: AVCaptureDevice.DiscoverySession = {
-#if os(iOS)
-        var deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInDualCamera,
-            .builtInDualWideCamera,
-            .builtInUltraWideCamera,
-            .builtInLiDARDepthCamera,
-            .builtInTelephotoCamera,
-            .builtInTripleCamera,
-            .builtInTrueDepthCamera,
-            .builtInWideAngleCamera,
-        ]
-        if #available(iOS 17, *) {
-            deviceTypes.append(.continuityCamera)
-        }
-#elseif os(macOS)
-        var deviceTypes: [AVCaptureDevice.DeviceType] = [
-            .builtInWideAngleCamera,
-            .deskViewCamera,
-        ]
-        if #available(macOS 14.0, *) {
-            deviceTypes.append(.continuityCamera)
-            deviceTypes.append(.external)
-        }
-#endif
-        return AVCaptureDevice.DiscoverySession(
-            deviceTypes: deviceTypes,
-            mediaType: .video,
-            position: .unspecified
-        )
-    }()
-
-    private var backCaptureDevices: [AVCaptureDevice] {
-        discoverySession.devices.filter { $0.position == .back }
-    }
-
-    private var frontCaptureDevices: [AVCaptureDevice] {
-        discoverySession.devices.filter { $0.position == .front }
-    }
-    
-    private var captureDevices: [AVCaptureDevice] {
-        var devices = [AVCaptureDevice]()
-#if os(macOS) || (os(iOS) && targetEnvironment(macCatalyst))
-        devices += discoverySession.devices
-#else
-
-        let defaultDevice = AVCaptureDevice.default(for: .video)
-        if let defaultDevice {
-            devices.append(defaultDevice)
-        }
-
-        if let backDevice = backCaptureDevices.first, backDevice != defaultDevice {
-            devices += [backDevice]
-        }
-        if let frontDevice = frontCaptureDevices.first, frontDevice != defaultDevice {
-            devices += [frontDevice]
-        }
-#endif
-        return devices
-    }
-    
-    private var availableCaptureDevices: [AVCaptureDevice] {
-        captureDevices.filter { $0.isConnected && !$0.isSuspended }.unique()
-    }
-
-    private var isUsingFrontCaptureDevice: Bool {
-        guard let captureDevice else { return false }
-        return frontCaptureDevices.contains(captureDevice)
-    }
-    
-    private var isUsingBackCaptureDevice: Bool {
-        guard let captureDevice else { return false }
-        return backCaptureDevices.contains(captureDevice)
-    }
-    
     private func updateCaptureDevice(forDevicePosition devicePosition: AVCaptureDevice.Position) {
         if case .unspecified = devicePosition {
             captureDevice = AVCaptureDevice.default(for: .video)
-        } else if let device = captureDevices.first(where: { $0.position == devicePosition }) {
+        } else if let device = deviceLookup.captureDevices.first(where: { $0.position == devicePosition }) {
             captureDevice = device
         } else {
             logger.warning("Couldn't update capture device for \(String(describing: devicePosition))")
@@ -364,228 +264,77 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Capture Session Configuration
+    // MARK: - Capture Service Configuration
 
-    private var videoConnections: [AVCaptureConnection] {
-        captureSession.outputs.compactMap { $0.connection(with: .video) }
-    }
-
-    private func configureCaptureSession() -> Bool {
+    private func configureCaptureService() async -> Bool {
         guard case .authorized = authorizationStatus else {
             return false
         }
 
-        updateCaptureDevice(forDevicePosition: devicePosition)
-
-        guard let captureDevice else {
-            log(.cameraDeviceNotSet)
+        guard let cameraDevice = deviceLookup.camera(
+            devicePosition: devicePosition,
+            defaultsToUserPreferredCamera: isUserPreferredCamera
+        ) else {
             return false
         }
 
-        captureSession.beginConfiguration()
-        defer { captureSession.commitConfiguration() }
-
-        if captureSession.canSetSessionPreset(sessionPreset) {
-            captureSession.sessionPreset = sessionPreset
-        } else {
-            captureSession.sessionPreset = .high
-            log(.cannotSetSessionPreset)
-        }
-
-        // Adding video input (used for both photo and video capture)
-        let videoInput = AVCaptureDeviceInput(device: captureDevice, logger: logger)
-        if let videoInput, captureSession.canAddInput(videoInput) {
-            captureSession.addInput(videoInput)
-            captureVideoInput = videoInput
-        } else {
-            log(.cannotAddVideoInput)
-        }
-
-        // Configure photo capture
-        let photoOutput = AVCapturePhotoOutput()
-        photoOutput.maxPhotoQualityPrioritization = .quality
-        if captureSession.canAddOutput(photoOutput) {
-            captureSession.addOutput(photoOutput)
-            capturePhotoOutput = photoOutput
-        } else {
-            log(.cannotAddPhotoOutput)
-        }
-
-        // Configure video capture
-        if isAudioEnabled {
-            let audioDevice = AVCaptureDevice.default(for: .audio)
-            let audioInput = AVCaptureDeviceInput(device: audioDevice, logger: logger)
-            if let audioInput, captureSession.canAddInput(audioInput) {
-                captureSession.addInput(audioInput)
-            } else {
-                log(.cannotAddAudioInput)
+        do {
+            await MainActor.run {
+                captureDevice = cameraDevice
             }
-        }
 
-        updateCaptureVideoOutput(recordingSettings)
-
-        isCaptureSessionConfigured = true
-        return true
-    }
-    
-    private func updateCaptureVideoInput(_ cameraDevice: AVCaptureDevice) {
-        guard case .authorized = authorizationStatus else {
-            return
-        }
-
-        guard isCaptureSessionConfigured else {
-            if configureCaptureSession(), !isPreviewPaused {
-                startCaptureSession()
-            }
-            return
-        }
-
-        captureSession.beginConfiguration()
-        defer { captureSession.commitConfiguration() }
-
-        // Remove current camera input
-        if let videoInput = captureVideoInput {
-            captureSession.removeInput(videoInput)
-            captureVideoInput = nil
-        }
-
-        // Add new camera input
-        let videoInput = AVCaptureDeviceInput(device: cameraDevice, logger: logger)
-        if let videoInput, captureSession.canAddInput(videoInput) {
-            captureSession.addInput(videoInput)
-            captureVideoInput = videoInput
-        }
-
-        updateCaptureOutputMirroring()
-        updateCaptureOutputOrientation()
-    }
-
-    private func updateCaptureVideoOutput(_ recordingSettings: RecordingSettings?) {
-        captureSession.beginConfiguration()
-        defer { captureSession.commitConfiguration() }
-
-        if let recordingSettings, let captureVideoFileOutput {
-            captureVideoFileOutput.configureOutput(
-                audioSettings: recordingSettings.audio,
-                videoSettings: recordingSettings.video
+            try await captureService.configure(
+                cameraDevice: cameraDevice,
+                microphoneDevice: isAudioEnabled ? deviceLookup.microphone() : nil,
+                sessionPreset: sessionPreset,
+                previewLayer: previewLayer,
+                recordingSettings: recordingSettings
             )
-        } else if let recordingSettings {
-            if let movieFileOutput = captureMovieFileOutput {
-                captureSession.removeOutput(movieFileOutput)
-                captureMovieFileOutput = nil
-            }
-
-            let videoFileOutput = AVCaptureVideoFileOutput()
-            videoFileOutput.configureOutput(
-                audioSettings: recordingSettings.audio,
-                videoSettings: recordingSettings.video
-            )
-            if captureSession.canAddOutput(videoFileOutput) {
-                captureSession.addOutput(videoFileOutput)
-                captureVideoFileOutput = videoFileOutput
-            } else {
-                log(.cannotAddVideoFileOutput)
-            }
-
-        } else if captureMovieFileOutput == nil {
-            if let videoFileOutput = captureVideoFileOutput {
-                captureSession.removeOutput(videoFileOutput)
-                captureVideoFileOutput = nil
-            }
-
-            let moveFileOutput = AVCaptureMovieFileOutput()
-            if captureSession.canAddOutput(moveFileOutput) {
-                captureSession.addOutput(moveFileOutput)
-                captureMovieFileOutput = moveFileOutput
-            } else {
-                log(.cannotAddVideoFileOutput)
-            }
-        }
-
-        updateCaptureOutputMirroring()
-        updateCaptureOutputOrientation()
-    }
-
-    private func updateCaptureOutputMirroring() {
-        let isVideoMirrored = isUsingFrontCaptureDevice
-        videoConnections.forEach { videoConnection in
-            if videoConnection.isVideoMirroringSupported {
-                videoConnection.isVideoMirrored = isVideoMirrored
-            }
+            return true
+        } catch {
+            return false
         }
     }
 
-
-    private func updateCaptureOutputOrientation() {
+    private func updateCaptureOutputOrientation() async {
 #if os(iOS)
-        var deviceOrientation = UIDevice.current.orientation
+        var deviceOrientation = await UIDevice.current.orientation
         logger.debug("Updating capture outputs video orientation: \(String(describing: deviceOrientation))")
         if case .unknown = deviceOrientation {
             // Fix device orientation using's screen coordinate space
-            deviceOrientation = UIScreen.main.deviceOrientation
+            deviceOrientation = await UIScreen.main.deviceOrientation
         }
 
-        videoConnections.forEach { videoConnection in
-            if videoConnection.isVideoOrientationSupported {
-                videoConnection.videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
-            }
-        }
+        let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
+        await captureService.updateCaptureOutputOrientation(videoOrientation)
 #elseif os(macOS)
 #endif
-    }
-
-
-    private func startCaptureSession() {
-#if os(iOS)
-        Task { @MainActor in
-            Self.startObservingDeviceOrientation()
-        }
-#endif
-        if !captureSession.isRunning {
-            sessionQueue.async {
-                self.captureSession.startRunning()
-            }
-        }
-    }
-    
-    private func stopCaptureSession() {
-#if os(iOS)
-        Task { @MainActor in
-            Self.stopObservingDeviceOrientation()
-        }
-#endif
-        if captureSession.isRunning {
-            sessionQueue.async {
-                self.captureSession.stopRunning()
-            }
-        }
-    }
-
-    // MARK: -
-
-    public var isVideoMirrored: Bool {
-        videoConnections.first?.isVideoMirrored ?? false
     }
 
     // MARK: - Device Orientation Handling
 #if os(iOS)
     private var deviceOrientationObserver: NSObjectProtocol?
 
-    @MainActor private func registerDeviceOrientationObserver() {
+    @MainActor
+    private func registerDeviceOrientationObserver() {
         deviceOrientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: UIDevice.current,
             queue: .main
         ) { [weak self] notification in
-            self?.updateCaptureOutputOrientation()
+            Task { @MainActor in
+                await self?.updateCaptureOutputOrientation()
+            }
         }
     }
 
-    @MainActor private static func startObservingDeviceOrientation() {
+    @MainActor
+    private static func startObservingDeviceOrientation() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
     }
 
-    @MainActor private static func stopObservingDeviceOrientation() {
+    @MainActor
+    private static func stopObservingDeviceOrientation() {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 #endif
@@ -593,81 +342,16 @@ public final class Camera: NSObject, ObservableObject {
     // MARK: - Private Methods
 
     private func captureDeviceDidChange(_ newCaptureDevice: AVCaptureDevice) {
-        logger.debug("Using capture device: \(newCaptureDevice.localizedName)")
-        sessionQueue.async { [self] in
-            updateCaptureVideoInput(newCaptureDevice)
-        }
-    }
-    
-}
-
-// MARK: - File Output Recording Delegate
-
-extension Camera: AVCaptureFileOutputRecordingDelegate {
-
-    public func fileOutput(
-        _ output: AVCaptureFileOutput,
-        didStartRecordingTo fileURL: URL,
-        from connections: [AVCaptureConnection]
-    ) {
-        isRecording = true
-    }
-    
-    public func fileOutput(
-        _ output: AVCaptureFileOutput,
-        didFinishRecordingTo outputFileURL: URL,
-        from connections: [AVCaptureConnection],
-        error: Error?
-    ) {
-        isRecording = false
-        if let error {
-            didStopRecording?(.failure(error))
-        } else {
-            didStopRecording?(.success(outputFileURL))
-        }
-    }
-}
-
-// MARK: - Video File Output Recording Delegate
-
-extension Camera: AVCaptureVideoFileOutputRecordingDelegate {
-
-    func videoFileOutput(
-        _ output: AVCaptureVideoFileOutput,
-        didStartRecordingTo fileURL: URL,
-        from connections: [AVCaptureConnection]
-    ) {
-        isRecording = true
-    }
-    
-    func videoFileOutput(
-        _ output: AVCaptureVideoFileOutput,
-        didFinishRecordingTo outputFileURL: URL,
-        from connections: [AVCaptureConnection],
-        error: Error?
-    ) {
-        isRecording = false
-        if let error {
-            didStopRecording?(.failure(error))
-        } else {
-            didStopRecording?(.success(outputFileURL))
-        }
-    }
-}
-
-// MARK: - Photo Capture Delegate
-
-extension Camera: AVCapturePhotoCaptureDelegate {
-
-    public func photoOutput(
-        _ output: AVCapturePhotoOutput,
-        didFinishProcessingPhoto photo: AVCapturePhoto,
-        error: Error?
-    ) {
-        if let error {
-            didTakePicture?(.failure(error))
-        } else {
-            didTakePicture?(.success(photo))
+        Task {
+            do {
+                logger.debug("Setting capture device: \(newCaptureDevice.localizedName)")
+                try await captureService.setCaptureDevice(
+                    newCaptureDevice,
+                    updateUserPreferredCamera: isUserPreferredCamera
+                )
+            } catch {
+                logger.error("Error updating capture device: \(error)")
+            }
         }
     }
 }

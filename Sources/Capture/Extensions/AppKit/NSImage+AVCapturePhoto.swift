@@ -6,11 +6,17 @@
 //
 
 #if os(macOS)
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 
 extension NSImage {
     public convenience init?(photo: AVCapturePhoto) {
+        if let cgImage = photo.cgImageRepresentation() {
+            let imageSize = NSSize(width: cgImage.width, height: cgImage.height)
+            self.init(cgImage: cgImage, size: imageSize)
+            return
+        }
+
         // Get the pixel buffer from the AVCapturePhoto
         guard let pixelBuffer = photo.pixelBuffer else {
             return nil

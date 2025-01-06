@@ -5,6 +5,7 @@
 //  Created by Quentin Fasquel on 07/12/2023.
 //
 
+@preconcurrency import AVFoundation
 #if canImport(UIKit)
 import UIKit.UIImage
 

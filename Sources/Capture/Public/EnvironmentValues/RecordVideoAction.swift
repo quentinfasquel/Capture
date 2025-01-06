@@ -7,18 +7,18 @@
 
 import SwiftUI
 
-public struct RecordVideoAction {
+public struct RecordVideoAction: Sendable {
 
-    var start: () -> Void = {
+    var start: @Sendable () async -> Void = {
         assertionFailure("@Environment(\\.recordVideo) must be accessed from a camera overlay view")
     }
 
-    var stop: () async -> Void = {
+    var stop: @Sendable () async -> Void = {
         assertionFailure("@Environment(\\.recordVideo) must be accessed from a camera overlay view")
     }
     
     public func startRecording() {
-        start()
+        Task { await start() }
     }
 
     public func stopRecording() {
@@ -26,13 +26,6 @@ public struct RecordVideoAction {
     }
 }
 
-private enum RecordVideoEnvironmentKey: EnvironmentKey {
-    static var defaultValue: RecordVideoAction = .init()
-}
-
 extension EnvironmentValues {
-    public internal(set) var recordVideo: RecordVideoAction {
-        get { self[RecordVideoEnvironmentKey.self] }
-        set { self[RecordVideoEnvironmentKey.self] = newValue }
-    }
+    @Entry public internal(set) var recordVideo: RecordVideoAction = .init()
 }

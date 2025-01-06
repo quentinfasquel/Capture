@@ -19,7 +19,7 @@ struct ContentView: View {
     @State private var path = NavigationPath()
     @State private var isPaused: Bool = false
 
-    @StateObject private var camera: Camera = .default
+    @StateObject private var camera: Camera = .userPreferredCamera
     @State private var tab: Tab = .photo
     @Environment(\.takePicture) var takePicture
     
@@ -38,12 +38,6 @@ struct ContentView: View {
             // Environment values override:
             // - recordingAudioSettings
             // - recordingVideoSettings
-            .environment(\.recordingVideoSettings, VideoSettings(
-                codec: .h264,
-                width: 200,
-                height: 200,
-                scalingMode: .resizeAspectFill
-            ))
             .overlay(alignment: .topTrailing) {
                 cameraDevicePicker
             }
@@ -55,10 +49,12 @@ struct ContentView: View {
         .sheet(item: $capturedImage) { image in
 #if os(iOS)
             Image(uiImage: image)
+                .resizable()
                 .scaledToFit()
                 .ignoresSafeArea()
 #elseif os(macOS)
             Image(nsImage: image)
+                .resizable()
                 .scaledToFit()
                 .ignoresSafeArea()
 #endif
@@ -87,10 +83,10 @@ struct ContentView: View {
     }
 
     @ViewBuilder var cameraDevicePicker: some View {
-        Picker(selection: $camera.deviceId) {
+        Picker(selection: $camera.captureDevice) {
             ForEach(camera.devices, id: \.uniqueID) { device in
                 Text(device.localizedName)
-                    .tag(device.uniqueID)
+                    .tag(device)
             }
         } label: { EmptyView() }
     }
@@ -130,13 +126,13 @@ struct ContentView: View {
             .preferredColorScheme(.dark)
 }
 
-extension URL: Identifiable {
+extension URL: @retroactive Identifiable {
     public var id: String {
         absoluteString
     }
 }
 
-extension PlatformImage: Identifiable {
+extension PlatformImage: @retroactive Identifiable {
     public var id: ObjectIdentifier {
         ObjectIdentifier(self)
     }

@@ -5,7 +5,7 @@
 //  Created by Quentin Fasquel on 24/12/2023.
 //
 
-import AVFoundation
+@preconcurrency import AVFoundation
 
 extension VideoSettings {
     public static let `default` = VideoSettings(
@@ -16,7 +16,7 @@ extension VideoSettings {
     )
 }
 
-public struct VideoSettings: Equatable {
+public struct VideoSettings: Equatable, Sendable {
 
     /// A video codec type (for instance
     public var codec: AVVideoCodecType
@@ -80,7 +80,7 @@ extension VideoSettings {
     
     // MARK: -
     
-    public struct PixelAspectRatio: Equatable {
+    public struct PixelAspectRatio: Equatable, Sendable {
         ///
         public var horizontalSpacing: Int
 
@@ -90,7 +90,7 @@ extension VideoSettings {
 
     // MARK: -
     
-    public struct CleanAperture: Equatable {
+    public struct CleanAperture: Equatable, Sendable {
         ///
         public var width: Int
         ///
@@ -103,7 +103,7 @@ extension VideoSettings {
 
     // MARK: -
     
-    public enum ScalingMode: String {
+    public enum ScalingMode: String, Sendable {
         // Crop to remove edge processing region; preserve aspect ratio of cropped source by reducing specified width or height if necessary.
         // Will not scale a small source up to larger dimensions.
         case fit
@@ -118,7 +118,7 @@ extension VideoSettings {
 
     // MARK: -
 
-    public struct ColorProperties: Equatable {
+    public struct ColorProperties: Equatable, Sendable {
         ///
         public var colorPrimaries: ColorPrimaries
 
@@ -128,21 +128,21 @@ extension VideoSettings {
         ///
         public var yCbCrMatrix: YCbCrMatrix
 
-        public enum ColorPrimaries: String {
+        public enum ColorPrimaries: String, Sendable {
             case ITU_R_709_2
             case SMPTE_C
             case P3_D65
             case ITU_R_2020
         }
 
-        public enum TransferFunction: String {
+        public enum TransferFunction: String, Sendable {
             case linear
             case ITU_R_709_2
             case ITU_R_2100_HLG
             case SMPTE_ST_2084_PQ
         }
         
-        public enum YCbCrMatrix: String {
+        public enum YCbCrMatrix: String, Sendable {
             case ITU_R_709_2
             case ITU_R_601_4
             case ITU_R_2020
@@ -151,7 +151,7 @@ extension VideoSettings {
     
     // MARK: -
 
-    public struct CompressionProperties: Equatable {
+    public struct CompressionProperties: Equatable, Sendable {
         // NSNumber (bits per second, H.264 only)
         public var averageBitRate: String?
 
@@ -172,7 +172,7 @@ extension VideoSettings {
         public var allowFrameReorderingKey: Bool?
     }
 
-    public enum ProfileLevel: String {
+    public enum ProfileLevel: String, Sendable {
         case H264Baseline30
         case H264Baseline31
         case H264Baseline41
