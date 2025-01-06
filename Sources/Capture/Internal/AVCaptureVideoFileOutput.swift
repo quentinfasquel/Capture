@@ -7,17 +7,10 @@
 
 @preconcurrency import AVFoundation
 
-protocol CaptureRecording: NSObject {
-    func stopRecording()
-}
-
-extension AVCaptureMovieFileOutput: CaptureRecording {
-}
-
 ///
 /// A replacement for `AVCaptureMovieFileOutput`
 ///
-final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
+final class AVCaptureVideoFileOutput: NSObject, @unchecked Sendable {
 
     private let outputQueue = DispatchQueue(label: "\(bundleIdentifier).CaptureVideoFileOutput")
     let audioDataOutput = AVCaptureAudioDataOutput()
@@ -104,7 +97,7 @@ final class AVCaptureVideoFileOutput: NSObject, CaptureRecording {
         }
 
         isRecording = true
-        
+
         DispatchQueue.main.async { [self] in
             delegate?.videoFileOutput(
                 self,

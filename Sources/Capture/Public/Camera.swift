@@ -16,7 +16,7 @@ public enum CameraError: Error {
     case missingVideoOutput
 }
 
-public final class Camera: ObservableObject {
+public final class Camera: ObservableObject, @unchecked Sendable {
 
     public static let `default` = Camera(.back)
 
@@ -296,19 +296,17 @@ public final class Camera: ObservableObject {
         }
     }
 
-    private func updateCaptureOutputOrientation() {
+    private func updateCaptureOutputOrientation() async {
 #if os(iOS)
-        var deviceOrientation = UIDevice.current.orientation
+        var deviceOrientation = await UIDevice.current.orientation
         logger.debug("Updating capture outputs video orientation: \(String(describing: deviceOrientation))")
         if case .unknown = deviceOrientation {
             // Fix device orientation using's screen coordinate space
-            deviceOrientation = UIScreen.main.deviceOrientation
+            deviceOrientation = await UIScreen.main.deviceOrientation
         }
 
-        Task {
-            let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
-            await captureService.updateCaptureOutputOrientation(videoOrientation)
-        }
+        let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
+        await captureService.updateCaptureOutputOrientation(videoOrientation)
 #elseif os(macOS)
 #endif
     }
@@ -317,21 +315,26 @@ public final class Camera: ObservableObject {
 #if os(iOS)
     private var deviceOrientationObserver: NSObjectProtocol?
 
-    @MainActor private func registerDeviceOrientationObserver() {
+    @MainActor
+    private func registerDeviceOrientationObserver() {
         deviceOrientationObserver = NotificationCenter.default.addObserver(
             forName: UIDevice.orientationDidChangeNotification,
             object: UIDevice.current,
             queue: .main
         ) { [weak self] notification in
-            self?.updateCaptureOutputOrientation()
+            Task { @MainActor in
+                await self?.updateCaptureOutputOrientation()
+            }
         }
     }
 
-    @MainActor private static func startObservingDeviceOrientation() {
+    @MainActor
+    private static func startObservingDeviceOrientation() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
     }
 
-    @MainActor private static func stopObservingDeviceOrientation() {
+    @MainActor
+    private static func stopObservingDeviceOrientation() {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 #endif

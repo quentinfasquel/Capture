@@ -7,7 +7,7 @@
 
 @preconcurrency import AVFoundation
 
-final class MovieCapture: NSObject {
+final class MovieCapture: NSObject, @unchecked Sendable {
     private(set) var movieOutput: MovieCaptureOutput?
     private var recordingSettings: RecordingSettings?
     private var recordingContinuation: CheckedContinuation<URL, Error>?

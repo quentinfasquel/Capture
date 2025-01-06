@@ -7,7 +7,7 @@
 
 @preconcurrency import AVFoundation
 
-final class PhotoCapture: NSObject {
+final class PhotoCapture: NSObject, @unchecked Sendable {
     let capturePhotoOutput: AVCapturePhotoOutput = AVCapturePhotoOutput()
     private var captureContinuation: CheckedContinuation<AVCapturePhoto, Error>?
 
