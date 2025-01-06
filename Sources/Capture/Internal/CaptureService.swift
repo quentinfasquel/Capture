@@ -28,17 +28,12 @@ actor CaptureService {
     }
 
     func configure(
-        cameraDevice: AVCaptureDevice?,
+        cameraDevice: AVCaptureDevice,
         microphoneDevice: AVCaptureDevice?,
         sessionPreset: AVCaptureSession.Preset,
         previewLayer: AVCaptureVideoPreviewLayer,
         recordingSettings: RecordingSettings?
     ) throws {
-
-        guard let cameraDevice = cameraDevice ?? .default(for: .video) else {
-            log(.cameraDeviceNotSet)
-            return
-        }
 
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
@@ -78,7 +73,11 @@ actor CaptureService {
         try await photoCapture.capturePhoto()
     }
 
-    func setCaptureDevice(_ captureDevice: AVCaptureDevice) throws {
+    func setCaptureDevice(_ captureDevice: AVCaptureDevice, updateUserPreferredCamera: Bool) throws {
+        guard isCapturedSessionConfigured else {
+            return
+        }
+
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
 
@@ -88,6 +87,10 @@ actor CaptureService {
 
         try configureCaptureVideoInput(captureDevice, microphoneDevice: captureAudioInput?.device)
         configureCaptureOutputMirroring()
+
+        if updateUserPreferredCamera, #available(iOS 17.0, *) {
+            AVCaptureDevice.userPreferredCamera = captureDevice
+        }
     }
 
     private var videoConnections: [AVCaptureConnection] {

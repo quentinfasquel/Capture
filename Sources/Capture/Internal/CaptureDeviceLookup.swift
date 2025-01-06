@@ -69,4 +69,42 @@ final class CaptureDeviceLookup {
     var availableCaptureDevices: [AVCaptureDevice] {
         captureDevices.filter { $0.isConnected && !$0.isSuspended }.unique()
     }
+
+    var userPreferredCamera: AVCaptureDevice? {
+        guard #available(iOS 17.0, *) else {
+            return nil
+        }
+        return AVCaptureDevice.userPreferredCamera
+    }
+
+    func microphone() -> AVCaptureDevice? {
+        if #available(iOS 17.0, *) {
+            AVCaptureDevice.default(.microphone, for: .audio, position: .unspecified)
+        } else {
+            AVCaptureDevice.default(for: .audio)
+        }
+    }
+
+    func camera(devicePosition: AVCaptureDevice.Position, defaultsToUserPreferredCamera: Bool) -> AVCaptureDevice? {
+        if defaultsToUserPreferredCamera, let userPreferredCamera {
+            if devicePosition == .unspecified || userPreferredCamera.position == devicePosition {
+                return userPreferredCamera
+            }
+        }
+
+
+        // Following the documentation, find the best device within device types
+        // https://developer.apple.com/documentation/avfoundation/choosing-a-capture-device
+        let defaultDiscoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInTripleCamera,
+                .builtInDualCamera,
+                .builtInDualWideCamera
+            ],
+            mediaType: .video,
+            position: devicePosition
+        )
+
+        return defaultDiscoverySession.devices.first
+    }
 }

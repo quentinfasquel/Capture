@@ -19,7 +19,7 @@ struct ContentView: View {
     @State private var path = NavigationPath()
     @State private var isPaused: Bool = false
 
-    @StateObject private var camera: Camera = .default
+    @StateObject private var camera: Camera = .userPreferredCamera
     @State private var tab: Tab = .photo
     @Environment(\.takePicture) var takePicture
     

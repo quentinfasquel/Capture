@@ -26,20 +26,22 @@ public final class Camera: ObservableObject {
 
     // MARK: - Internal Properties
 
-    var devicePosition: CameraPosition
     var sessionPreset: AVCaptureSession.Preset
     var recordingSettings: RecordingSettings?
     var isAudioEnabled: Bool
+    let isUserPreferredCamera: Bool
 
     // MARK: - Public API
 
     public let previewLayer = AVCaptureVideoPreviewLayer()
 
+    @Published public private(set) var devicePosition: CameraPosition
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
     @Published public var captureDevice: AVCaptureDevice? {
         didSet {
+            devicePosition = captureDevice?.position ?? .unspecified
             if oldValue != captureDevice, let captureDevice {
                 captureDeviceDidChange(captureDevice)
             }
@@ -59,7 +61,8 @@ public final class Camera: ObservableObject {
         self.init(
             position: position,
             preset: .high,
-            audioEnabled: audioEnabled
+            audioEnabled: audioEnabled,
+            userPreferredCamera: false
         )
     }
 
@@ -70,15 +73,54 @@ public final class Camera: ObservableObject {
     /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
     /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
     ///
-    public required init(
-        position: CameraPosition,
+    public convenience init(
+        position: CameraPosition = .unspecified,
         preset: AVCaptureSession.Preset,
         audioEnabled: Bool = true
+    ) {
+        self.init(
+            position: position,
+            preset: preset,
+            audioEnabled: audioEnabled,
+            userPreferredCamera: false
+        )
+    }
+
+    @available(iOS 17.0, *)
+    public static var userPreferredCamera: Camera {
+        return .userPreferredCamera(preset: .high, audioEnabled: true)
+    }
+
+    ///
+    /// Instantiate a Camera instance that will match the user preferred camera and update it when switching capture device
+    /// - parameter preset: the capture session's preset to use
+    /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
+    /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
+    ///
+    @available(iOS 17.0, *)
+    public class func userPreferredCamera(
+        preset: AVCaptureSession.Preset,
+        audioEnabled: Bool = true
+    ) -> Camera {
+        return Camera(
+            position: .unspecified,
+            preset: preset,
+            audioEnabled: audioEnabled,
+            userPreferredCamera: true
+        )
+    }
+
+    private init(
+        position: CameraPosition,
+        preset: AVCaptureSession.Preset = .high,
+        audioEnabled: Bool = true,
+        userPreferredCamera: Bool = false
     ) {
         captureService = CaptureService(session: AVCaptureSession(), queue: sessionQueue)
         devicePosition = position
         sessionPreset = preset
         isAudioEnabled = audioEnabled
+        isUserPreferredCamera = userPreferredCamera
         #if os(iOS)
         Task { @MainActor in
             registerDeviceOrientationObserver()
@@ -86,7 +128,7 @@ public final class Camera: ObservableObject {
         #endif
         devices = deviceLookup.availableCaptureDevices
     }
-    
+
     deinit {
         #if os(iOS)
         Task { @MainActor in
@@ -229,10 +271,21 @@ public final class Camera: ObservableObject {
             return false
         }
 
+        guard let cameraDevice = deviceLookup.camera(
+            devicePosition: devicePosition,
+            defaultsToUserPreferredCamera: isUserPreferredCamera
+        ) else {
+            return false
+        }
+
         do {
+            await MainActor.run {
+                captureDevice = cameraDevice
+            }
+
             try await captureService.configure(
-                cameraDevice: deviceLookup.captureDevices.first,
-                microphoneDevice: isAudioEnabled ? .default(for: .audio) : nil,
+                cameraDevice: cameraDevice,
+                microphoneDevice: isAudioEnabled ? deviceLookup.microphone() : nil,
                 sessionPreset: sessionPreset,
                 previewLayer: previewLayer,
                 recordingSettings: recordingSettings
@@ -288,8 +341,11 @@ public final class Camera: ObservableObject {
     private func captureDeviceDidChange(_ newCaptureDevice: AVCaptureDevice) {
         Task {
             do {
-                try await captureService.setCaptureDevice(newCaptureDevice)
-                logger.debug("Using capture device: \(newCaptureDevice.localizedName)")
+                logger.debug("Setting capture device: \(newCaptureDevice.localizedName)")
+                try await captureService.setCaptureDevice(
+                    newCaptureDevice,
+                    updateUserPreferredCamera: isUserPreferredCamera
+                )
             } catch {
                 logger.error("Error updating capture device: \(error)")
             }
