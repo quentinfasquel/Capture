@@ -60,12 +60,8 @@ final class CaptureDeviceLookup {
             devices.append(defaultDevice)
         }
 
-        if let backDevice = backCaptureDevices.first, backDevice != defaultDevice {
-            devices += [backDevice]
-        }
-        if let frontDevice = frontCaptureDevices.first, frontDevice != defaultDevice {
-            devices += [frontDevice]
-        }
+        devices += backCaptureDevices.filter { $0 != defaultDevice }
+        devices += frontCaptureDevices.filter { $0 != defaultDevice }
 #endif
         return devices
     }
